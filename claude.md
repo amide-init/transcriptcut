@@ -130,6 +130,16 @@ Deleting transcript content should create a corresponding video cut.
 
 # 3. AI Editing
 
+**Status: the free-text "Ask AI" command bar described below was built
+(LangGraph Director/Editor/Validator pipeline, see sections 5-8), verified
+end-to-end, then deliberately removed** -- an open text field that could
+propose arbitrary edits to the project was decided against. AI-assisted
+editing in this project now means specific, scoped actions the user
+explicitly triggers (filler-word removal, silence removal), not an
+open-ended chat interface. Sections 5-8 (the agent architecture) remain
+as a record of that design and could be relevant again behind a more
+constrained interface, but nothing currently implements them.
+
 Provide an AI command interface.
 
 Example commands:
@@ -961,10 +971,12 @@ Project C
 ├───────────────────────┴──────────────────────┤
 │ Timeline                                     │
 │ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  │
-├──────────────────────────────────────────────┤
-│ Ask AI: "Remove all filler words..."         │
 └──────────────────────────────────────────────┘
 ```
+
+No free-text "Ask AI" bar (see section 3's status note) -- AI actions
+(filler-word removal, silence removal) are explicit buttons in the
+transcript/timeline panels, not an open text field.
 
 Do not build a huge traditional Premiere/Final Cut-style editor initially.
 
@@ -1004,19 +1016,11 @@ Do not blindly remove words such as "like" when they are semantically meaningful
 
 Detect long pauses and create cut operations.
 
-### 5. Natural-language editing
+### 5. Natural-language editing -- removed (see section 3's status note)
 
-Examples:
-
-```text
-Remove the intro.
-
-Keep only the section about LangGraph.
-
-Make this shorter.
-
-Remove the pricing discussion.
-```
+Built and verified, then deliberately removed in favor of scoped,
+explicit AI actions instead of an open text field. Left here for
+history; not part of the current app.
 
 ### 6. Export
 
@@ -1203,10 +1207,11 @@ Delete transcript text
   ↓
 See corresponding video section removed
   ↓
-Ask AI:
-"Remove all filler words"
+Click "Find filler words" (or "Find long pauses")
   ↓
-Review edit operations
+Review flagged words
+  ↓
+Remove them
   ↓
 Preview
   ↓
