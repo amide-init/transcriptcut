@@ -1,0 +1,78 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-plex-sans);
+  --font-mono: var(--font-plex-mono);
+  --font-heading: var(--font-plex-sans);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-cut: var(--cut);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+}
+
+/*
+ * A desktop editing tool, not a marketing surface: dark canvas is the only
+ * theme (matches every pro NLE), and color is assigned by interaction role
+ * rather than decoration — amber marks playback position, blue marks
+ * selection, red marks a destructive cut.
+ */
+:root {
+  --background: #12141a;
+  --foreground: #ededef;
+  --card: #1b1e26;
+  --card-foreground: #ededef;
+  --popover: #1b1e26;
+  --popover-foreground: #ededef;
+  --primary: #f0a63a;
+  --primary-foreground: #1a1206;
+  --secondary: #232733;
+  --secondary-foreground: #ededef;
+  --muted: #1c1f28;
+  --muted-foreground: #8b90a0;
+  --accent: #5b8def;
+  --accent-foreground: #0e1420;
+  --destructive: #e5484d;
+  --destructive-foreground: #fff0f0;
+  --cut: #e5484d;
+  --border: #2a2e38;
+  --input: #2a2e38;
+  --ring: #f0a63a;
+  --radius: 0.5rem;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
