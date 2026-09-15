@@ -10,23 +10,29 @@ The core product idea is:
 
 The MVP should prioritize a reliable transcript ↔ video editing workflow over advanced visual effects.
 
+This project is **local-first and open source**. It runs entirely on your
+own machine — no cloud account, no vendor sign-up, no bill — with a single
+`npm install && npm run dev`. The only external dependency is an LLM
+provider API key (for transcription and AI editing), used purely for
+inference calls, never for storage. See section 13 for the full
+architecture rationale.
+
 ---
 
 # 1. Product Goal
 
 Users should be able to:
 
-1. Sign up/login.
-2. Create a video project.
-3. Upload a video.
-4. Automatically transcribe the video.
-5. View the video and transcript side-by-side.
-6. Edit/delete transcript sections.
-7. Automatically reflect transcript edits on the video timeline.
-8. Give natural-language editing commands.
-9. Let AI convert commands into structured edit operations.
-10. Preview the result.
-11. Render/export the final video.
+1. Create a video project.
+2. Upload a video.
+3. Automatically transcribe the video.
+4. View the video and transcript side-by-side.
+5. Edit/delete transcript sections.
+6. Automatically reflect transcript edits on the video timeline.
+7. Give natural-language editing commands.
+8. Let AI convert commands into structured edit operations.
+9. Preview the result.
+10. Render/export the final video.
 
 Example:
 
@@ -58,22 +64,24 @@ AI identifies filler words from the transcript and creates corresponding cut ope
 
 ## Must Have
 
-### Authentication
+### Accounts
 
-* Google authentication
-* Email/password authentication if straightforward
-* Firebase Authentication
+No accounts, no login screen. v1 is a single local user — whoever runs the
+app owns every project on that machine. This is a deliberate simplicity
+choice for a self-hosted OSS tool, not an oversight; see section 18 for
+what that does and doesn't mean for security, and section 17 for how the
+schema stays ready for multi-user support later without a rewrite.
 
 ### Projects
 
 * Create project
 * Rename project
 * Delete project
-* List user's projects
+* List projects
 
 ### Video Upload
 
-* Upload video to Firebase Storage
+* Upload video to local filesystem storage
 * Display upload progress
 * Store video metadata
 
@@ -148,7 +156,7 @@ The AI produces structured edit operations.
 
 # 4. Model Strategy
 
-Use only two LLMs in the MVP.
+Use only two LLMs for editing in the MVP.
 
 ## GPT-4o-mini
 
@@ -193,6 +201,14 @@ GPT-4o-mini
 ```
 
 Do not use GPT-5.6 Luna for every request.
+
+## Transcription model
+
+Transcription is a separate concern from editing and isn't routed through
+the GPT-4o-mini / GPT-5.6 Luna split above. Use OpenAI Whisper
+(`whisper-1`, `verbose_json`, word + segment timestamp granularity) —
+already implemented in `lib/ai/transcribe.ts`. Keep it behind a clear
+service interface (per section 29) so the provider can be swapped later.
 
 ---
 
@@ -380,7 +396,6 @@ Example:
 ```typescript
 type VideoProject = {
   id: string;
-  userId: string;
   name: string;
   duration: number;
 
@@ -393,6 +408,10 @@ type VideoProject = {
   updatedAt: Timestamp;
 };
 ```
+
+No `userId` field for v1 — see section 2 (Accounts). If multi-user
+self-hosting is ever added, it should be an additive column plus a
+filter at the query layer, not a data-model rewrite.
 
 ```typescript
 type Track = {
@@ -540,40 +559,31 @@ Output MP4
 
 Do not expose shell execution to users.
 
-Sanitize and validate all FFmpeg parameters.
+Sanitize and validate all FFmpeg parameters — this matters even more
+locally than it would behind a cloud API, since FFmpeg now runs as a
+child process on the same machine as everything else (see section 18).
 
 ---
 
-# 13. Cloud Architecture
+# 13. Architecture (local-first)
 
-Use Google Cloud / Firebase.
+No cloud account is required to run or develop this project.
 
-Do not introduce AWS.
+* **Database:** SQLite via Prisma. A single file, no server process, no
+  connection string to configure.
+* **Storage:** the local filesystem, under a configurable data directory
+  (see section 15).
+* **Rendering:** FFmpeg, invoked as a local child process (see section 14).
+* **AI:** an LLM provider API key (OpenAI by default) for transcription and
+  editing calls only — never for storage. Keep the provider behind a
+  service interface (section 29) so it can be swapped.
 
-## Firebase
-
-Use:
-
-* Firebase Authentication
-* Firestore
-* Firebase Storage / Google Cloud Storage
-
-## Google Cloud
-
-Use:
-
-* Cloud Run
-* Cloud Run Jobs
-* Pub/Sub
-* Cloud Logging
-* Cloud Monitoring
-
-Potential later additions:
-
-* Cloud SQL PostgreSQL
-* pgvector
-* Memorystore Redis
-* Cloud CDN
+Do not introduce Firebase, AWS, or GCP. If someone wants to deploy this
+somewhere (a VPS, a container, a home server), that should work by
+pointing the data directory at a persistent volume — no rewrite required.
+Cloud-native scaling (managed Postgres, object storage, a real job queue)
+is a legitimate future path (see section 29) but is not a v1 requirement,
+and shouldn't be added speculatively.
 
 ---
 
@@ -586,23 +596,19 @@ Use:
 ```text
 Frontend
    ↓
-Cloud Run API
+Next.js API route
    ↓
-Create render job
+Create RenderJob row (SQLite, status: "queued")
    ↓
-Firestore
+Kick off a local async render task
    ↓
-Pub/Sub
+FFmpeg (child process)
    ↓
-Cloud Run Job
+Write output to local disk
    ↓
-FFmpeg
+Update RenderJob row
    ↓
-Cloud Storage
-   ↓
-Update Firestore
-   ↓
-Frontend receives status
+Frontend polls for status
 ```
 
 Render status:
@@ -615,23 +621,35 @@ type RenderStatus =
   | "failed";
 ```
 
+For v1 (single local user, one render at a time is fine), an in-process
+async task kicked off from the API route and tracked via the `RenderJob`
+row is sufficient — there's no need for Pub/Sub, Cloud Run Jobs, or a
+separate worker process. Only reach for a real job queue (e.g. a
+SQLite-backed queue, or BullMQ + Redis) if concurrent renders become an
+actual requirement, not preemptively.
+
 ---
 
 # 15. Storage
 
-Use Firebase Storage / Google Cloud Storage.
+Use the local filesystem, rooted at a configurable data directory (an env
+var, e.g. `DATA_DIR`, defaulting to `./data`) so self-hosters can point it
+at a mounted volume.
 
 Recommended structure:
 
 ```text
-users/{userId}/
-projects/{projectId}/
+data/
+  projects/{projectId}/
     original/
     proxy/
     audio/
     thumbnails/
     renders/
 ```
+
+No `users/{userId}/` prefix for v1 (see section 2). `data/` must be
+gitignored — it holds user media, not source.
 
 Original videos must never be overwritten.
 
@@ -648,7 +666,7 @@ Example:
 ```text
 Original 1080p/4K
        │
-       ├── Original → Cloud Storage
+       ├── Original → local disk
        │
        └── Proxy → Editor
 ```
@@ -659,45 +677,58 @@ Final rendering should use the original media.
 
 ---
 
-# 17. Firestore Structure
+# 17. Database Schema (SQLite via Prisma)
 
-Suggested structure:
+Suggested Prisma models:
 
 ```text
-users/{userId}
+Project
 
-projects/{projectId}
+Asset          — belongs to Project
 
-projects/{projectId}/assets/{assetId}
+Transcript     — belongs to Project
 
-projects/{projectId}/transcripts/{transcriptId}
+EditOperation  — belongs to Project
 
-projects/{projectId}/editOperations/{operationId}
-
-projects/{projectId}/renderJobs/{renderJobId}
+RenderJob      — belongs to Project
 ```
 
-Keep user ownership checks on every project-related operation.
+No `User` model, no ownership checks for v1 (see section 2) — every
+project belongs to the one local user implicitly. Still key every table
+by `projectId` with a foreign key and cascading delete, so the schema
+stays relationally sound and an `ownerId` column could be added later
+without restructuring anything.
 
 ---
 
 # 18. Security
 
+Even without accounts, this is still an app that runs FFmpeg and touches
+the filesystem on the user's behalf — validate accordingly:
+
 Never trust client-provided:
 
-* userId
-* projectId
-* asset ownership
-* storage path
+* project id (must exist, and resolve only to paths under the data directory)
+* storage path (reject any path that escapes the data directory — no `..` traversal)
 * render parameters
 
-Firebase Security Rules must ensure users can only access their own projects/assets.
+Specifically:
 
-Cloud Run APIs must independently validate authentication and authorization.
+* Sanitize and validate all FFmpeg parameters — never interpolate
+  user/AI-provided strings directly into a shell command (see section 6).
+* Validate every file path against the configured data directory root
+  before reading or writing.
+* Never commit `.env` or API keys. This matters more, not less, for an
+  OSS repo — contributors must never commit their own local
+  `OPENAI_API_KEY`. Keep `.env*` gitignored and ship a `.env.example`.
+* Never expose model API keys in the browser — API calls happen only in
+  server-side route handlers.
 
-Never expose model API keys in the browser.
-
-Never expose service-account credentials.
+**OSS self-hosting note:** v1 has no authentication (section 2). That's a
+reasonable default for running the app on your own machine, and a real
+risk if you expose it to a network beyond that — don't put the no-auth
+version on the public internet or a shared network without adding real
+authentication first.
 
 ---
 
@@ -834,9 +865,12 @@ Return:
 
 # 24. Observability
 
-Use LangSmith for AI traces.
+LangSmith (or an equivalent) is useful for AI traces, but it's a
+third-party SaaS — keep it **optional and opt-in**, disabled by default,
+enabled via an env var. An OSS tool people self-host shouldn't silently
+phone traces home.
 
-Track:
+When enabled, track:
 
 * model used
 * latency
@@ -898,7 +932,7 @@ AI output must never be considered correct merely because the model returned val
 
 # 26. MVP UI
 
-Build only these screens:
+Build only these screens (no login screen — the dashboard is the entry point):
 
 ### Dashboard
 
@@ -1048,6 +1082,17 @@ Potential future integrations:
 
 Keep these integrations behind clear service interfaces so providers can be changed later.
 
+Potential future infrastructure (only if a real need appears — see
+section 30):
+
+* an optional Postgres backend, for anyone who outgrows SQLite
+* an optional cloud storage backend (S3-compatible), for anyone who
+  doesn't want to keep media on the local disk
+* a real background job queue, if concurrent rendering becomes necessary
+
+Keep these behind the same storage/queue interfaces the local
+implementation uses, so they're additive rather than a migration.
+
 ---
 
 # 30. Coding Principles
@@ -1085,8 +1130,7 @@ Validate:
 * user input
 * model output
 * timestamps
-* project ownership
-* media paths
+* file paths (stay inside the data directory)
 * rendering parameters
 
 ### Optimize for MVP.
@@ -1098,6 +1142,9 @@ A working transcript-based editor is more valuable than an unfinished full-featu
 # 31. Suggested Repository Structure
 
 ```text
+prisma/
+└── schema.prisma
+
 src/
 ├── app/
 │   ├── dashboard/
@@ -1112,11 +1159,11 @@ src/
 │   └── ai/
 │
 ├── lib/
-│   ├── firebase/
+│   ├── db/              (Prisma client)
 │   ├── ai/
 │   ├── langgraph/
 │   ├── ffmpeg/
-│   ├── storage/
+│   ├── storage/         (local filesystem helpers)
 │   └── validation/
 │
 ├── agents/
@@ -1144,8 +1191,6 @@ src/
 The MVP is complete when a user can:
 
 ```text
-Sign up
-  ↓
 Create project
   ↓
 Upload a video
@@ -1168,7 +1213,8 @@ Preview
 Export MP4
 ```
 
-The entire workflow must work end-to-end before adding advanced AI features.
+The entire workflow must work end-to-end, entirely locally, before adding
+advanced AI features.
 
 ---
 
