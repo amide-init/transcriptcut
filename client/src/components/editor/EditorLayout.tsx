@@ -8,8 +8,7 @@ import { TranscriptPanel } from "@/components/transcript/TranscriptPanel";
 import { Timeline } from "@/components/timeline/Timeline";
 import { AskAI } from "@/components/ai/AskAI";
 import { FilterDrawer } from "@/components/editor/FilterDrawer";
-import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { ExportButton } from "@/components/editor/ExportButton";
 
 export function EditorLayout({ videoUrl }: { videoUrl: string }) {
   const name = useProjectStore((s) => s.name);
@@ -29,16 +28,7 @@ export function EditorLayout({ videoUrl }: { videoUrl: string }) {
         </div>
         <div className="flex items-center gap-2">
           <FilterDrawer />
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span>
-                <Button size="sm" disabled>
-                  Export
-                </Button>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>Rendering isn&apos;t wired up yet</TooltipContent>
-          </Tooltip>
+          <ExportButton />
         </div>
       </header>
 
