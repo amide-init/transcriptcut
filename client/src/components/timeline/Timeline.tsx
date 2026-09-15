@@ -11,14 +11,9 @@ import {
   sourceTimeToEditedTime,
 } from "@/lib/timeline/cuts";
 import { detectSilences, type SilenceGap } from "@/lib/timeline/silence";
+import { formatTimecode } from "@/lib/timeline/format";
 import { Button } from "@/components/ui/button";
 import type { CutOperation } from "@/types/edit-operation";
-
-function formatTimecode(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
 
 export function Timeline() {
   const trackRef = useRef<HTMLDivElement>(null);

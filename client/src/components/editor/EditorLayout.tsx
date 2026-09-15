@@ -6,6 +6,7 @@ import { useProjectStore } from "@/stores/project-store";
 import { VideoPlayer } from "@/components/video-player/VideoPlayer";
 import { TranscriptPanel } from "@/components/transcript/TranscriptPanel";
 import { Timeline } from "@/components/timeline/Timeline";
+import { AskAI } from "@/components/ai/AskAI";
 import { FilterDrawer } from "@/components/editor/FilterDrawer";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -51,6 +52,7 @@ export function EditorLayout({ videoUrl }: { videoUrl: string }) {
       </div>
 
       <Timeline />
+      <AskAI />
     </div>
   );
 }
