@@ -15,6 +15,8 @@ type TranscriptStore = {
   clearSelection: () => void;
   setFillerWordIds: (ids: string[]) => void;
   setDetectingFillerWords: (detecting: boolean) => void;
+  /** Local-only update; persisting to the backend is the caller's job (see TranscriptPanel). */
+  setSegmentSpeaker: (segmentId: string, speaker: string | null) => void;
 };
 
 export const useTranscriptStore = create<TranscriptStore>((set, get) => ({
@@ -47,4 +49,17 @@ export const useTranscriptStore = create<TranscriptStore>((set, get) => ({
 
   setFillerWordIds: (fillerWordIds) => set({ fillerWordIds }),
   setDetectingFillerWords: (detectingFillerWords) => set({ detectingFillerWords }),
+
+  setSegmentSpeaker: (segmentId, speaker) =>
+    set((s) => {
+      if (!s.transcript) return s;
+      return {
+        transcript: {
+          ...s.transcript,
+          segments: s.transcript.segments.map((seg) =>
+            seg.id === segmentId ? { ...seg, speaker: speaker ?? undefined } : seg
+          ),
+        },
+      };
+    }),
 }));

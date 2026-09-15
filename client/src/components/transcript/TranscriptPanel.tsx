@@ -6,6 +6,7 @@ import { useTimelineStore } from "@/stores/timeline-store";
 import { usePlayerStore } from "@/stores/player-store";
 import { useProjectStore } from "@/stores/project-store";
 import { Button } from "@/components/ui/button";
+import { SpeakerLabel } from "@/components/transcript/SpeakerLabel";
 import type { CutOperation } from "@/types/edit-operation";
 
 function isWordCut(start: number, end: number, cuts: CutOperation[]): boolean {
@@ -22,6 +23,7 @@ export function TranscriptPanel() {
   const detectingFillerWords = useTranscriptStore((s) => s.detectingFillerWords);
   const setFillerWordIds = useTranscriptStore((s) => s.setFillerWordIds);
   const setDetectingFillerWords = useTranscriptStore((s) => s.setDetectingFillerWords);
+  const setSegmentSpeaker = useTranscriptStore((s) => s.setSegmentSpeaker);
 
   const projectId = useProjectStore((s) => s.id);
 
@@ -40,6 +42,10 @@ export function TranscriptPanel() {
     [transcript]
   );
   const fillerWordIdSet = useMemo(() => new Set(fillerWordIds), [fillerWordIds]);
+  const existingSpeakers = useMemo(
+    () => Array.from(new Set(transcript?.segments.map((s) => s.speaker).filter((s): s is string => !!s))),
+    [transcript]
+  );
 
   if (!transcript) return null;
 
@@ -84,6 +90,16 @@ export function TranscriptPanel() {
     setFillerWordIds([]);
   };
 
+  const handleSpeakerChange = (segmentId: string, speaker: string | null) => {
+    setSegmentSpeaker(segmentId, speaker);
+    if (!projectId) return;
+    fetch(`/api/projects/${projectId}/transcript`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ segmentId, speaker }),
+    }).catch((err) => console.error("Failed to persist speaker:", err));
+  };
+
   return (
     <div className="flex h-full flex-col gap-3 p-3">
       <div className="flex h-7 items-center justify-between">
@@ -115,40 +131,61 @@ export function TranscriptPanel() {
           )}
         </div>
       </div>
-      <div className="flex-1 space-y-4 overflow-y-auto pr-1 text-[1.0625rem] leading-[1.7]">
-        {transcript.segments.map((segment) => (
-          <p key={segment.id}>
-            {segment.words.map((word) => {
-              const cut = isWordCut(word.start, word.end, cuts);
-              const selected = selectedWordIds.includes(word.id);
-              const active = currentTime >= word.start && currentTime < word.end;
-              const filler = fillerWordIdSet.has(word.id);
-              return (
-                <span
-                  key={word.id}
-                  onClick={(e) => {
-                    if (cut) return;
-                    seek(word.start);
-                    handleWordClick(word.id, e);
-                  }}
-                  className={[
-                    "cursor-pointer rounded px-0.5 transition-colors",
-                    cut
-                      ? "text-muted-foreground/50 line-through decoration-destructive/70"
-                      : "",
-                    selected ? "bg-accent/30" : "",
-                    active && !cut ? "bg-primary/25" : "",
-                    filler && !cut
-                      ? "underline decoration-dotted decoration-muted-foreground underline-offset-4"
-                      : "",
-                  ].join(" ")}
-                >
-                  {word.text}{" "}
-                </span>
-              );
-            })}
-          </p>
+      <datalist id="speaker-suggestions">
+        {existingSpeakers.map((name) => (
+          <option key={name} value={name} />
         ))}
+      </datalist>
+      <div className="flex-1 space-y-4 overflow-y-auto pr-1 text-[1.0625rem] leading-[1.7]">
+        {transcript.segments.map((segment, i) => {
+          const previousSpeaker = transcript.segments[i - 1]?.speaker;
+          // Unset is never "the same speaker" as another unset segment --
+          // only dedupe the label when both are the same real, assigned name.
+          const showSpeakerLabel = !segment.speaker || segment.speaker !== previousSpeaker;
+          return (
+            <div key={segment.id}>
+              {showSpeakerLabel && (
+                <div className="mb-1">
+                  <SpeakerLabel
+                    speaker={segment.speaker}
+                    onChange={(speaker) => handleSpeakerChange(segment.id, speaker)}
+                  />
+                </div>
+              )}
+              <p>
+                {segment.words.map((word) => {
+                  const cut = isWordCut(word.start, word.end, cuts);
+                  const selected = selectedWordIds.includes(word.id);
+                  const active = currentTime >= word.start && currentTime < word.end;
+                  const filler = fillerWordIdSet.has(word.id);
+                  return (
+                    <span
+                      key={word.id}
+                      onClick={(e) => {
+                        if (cut) return;
+                        seek(word.start);
+                        handleWordClick(word.id, e);
+                      }}
+                      className={[
+                        "cursor-pointer rounded px-0.5 transition-colors",
+                        cut
+                          ? "text-muted-foreground/50 line-through decoration-destructive/70"
+                          : "",
+                        selected ? "bg-accent/30" : "",
+                        active && !cut ? "bg-primary/25" : "",
+                        filler && !cut
+                          ? "underline decoration-dotted decoration-muted-foreground underline-offset-4"
+                          : "",
+                      ].join(" ")}
+                    >
+                      {word.text}{" "}
+                    </span>
+                  );
+                })}
+              </p>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
