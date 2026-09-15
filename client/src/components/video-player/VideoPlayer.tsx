@@ -22,6 +22,16 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
 
   const filterId = useProjectStore((s) => s.filterId);
   const filterCss = getFilterPreset(filterId).css;
+  const persistDuration = useProjectStore((s) => s.setDuration);
+  const durationPersisted = useRef(false);
+
+  const handleDurationKnown = (seconds: number) => {
+    setDuration(seconds);
+    if (!durationPersisted.current) {
+      durationPersisted.current = true;
+      persistDuration(seconds);
+    }
+  };
 
   const operations = useTimelineStore((s) => s.operations);
   const cuts = operations.filter((op): op is CutOperation => op.type === "cut");
@@ -40,9 +50,10 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
   useEffect(() => {
     const video = videoRef.current;
     if (video && video.readyState >= 1 && !Number.isNaN(video.duration)) {
-      setDuration(video.duration);
+      handleDurationKnown(video.duration);
     }
-  }, [videoUrl, setDuration]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [videoUrl]);
 
   // Expose the live node so other UI (e.g. the filter drawer) can grab a
   // frame for a thumbnail without lifting the ref through props.
@@ -74,7 +85,7 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
       controls
       className="h-full w-full bg-black"
       style={{ filter: filterCss }}
-      onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+      onLoadedMetadata={(e) => handleDurationKnown(e.currentTarget.duration)}
       onTimeUpdate={handleTimeUpdate}
       onPlay={() => setIsPlaying(true)}
       onPause={() => setIsPlaying(false)}

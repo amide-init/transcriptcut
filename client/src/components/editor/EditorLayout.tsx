@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useProjectStore } from "@/stores/project-store";
 import { useTranscriptStore } from "@/stores/transcript-store";
 import { useTimelineStore } from "@/stores/timeline-store";
@@ -11,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 export function EditorLayout({ videoUrl }: { videoUrl: string }) {
+  const router = useRouter();
   const name = useProjectStore((s) => s.name);
   const resetProject = useProjectStore((s) => s.reset);
   const resetTranscript = useTranscriptStore((s) => s.setTranscript);
@@ -20,6 +22,7 @@ export function EditorLayout({ videoUrl }: { videoUrl: string }) {
     resetProject();
     resetTranscript(null);
     resetTimeline();
+    router.push("/");
   };
 
   return (
