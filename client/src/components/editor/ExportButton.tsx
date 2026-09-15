@@ -16,6 +16,7 @@ export function ExportButton() {
   const [status, setStatus] = useState<JobStatus | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [burnInCaptions, setBurnInCaptions] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -57,7 +58,11 @@ export function ExportButton() {
     setStatus("queued");
 
     try {
-      const res = await fetch(`/api/projects/${projectId}/render`, { method: "POST" });
+      const res = await fetch(`/api/projects/${projectId}/render`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ burnInCaptions }),
+      });
       const data: { success: true; jobId: string } | { success: false; error: { message: string } } =
         await res.json();
       if (!data.success) {
@@ -72,29 +77,47 @@ export function ExportButton() {
     }
   };
 
-  if (status === "completed" && downloadUrl) {
-    return (
-      <div className="flex items-center gap-2">
-        <Button asChild size="sm">
-          <a href={downloadUrl} download>
-            Download
-          </a>
-        </Button>
-        <Button variant="ghost" size="xs" onClick={handleExport}>
-          Re-export
-        </Button>
-      </div>
-    );
-  }
-
   const busy = status === "queued" || status === "processing";
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-3">
+      {projectId && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <a href={`/api/projects/${projectId}/captions?format=srt`} download className="hover:text-foreground">
+            SRT
+          </a>
+          <a href={`/api/projects/${projectId}/captions?format=vtt`} download className="hover:text-foreground">
+            VTT
+          </a>
+        </div>
+      )}
+      <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <input
+          type="checkbox"
+          checked={burnInCaptions}
+          onChange={(e) => setBurnInCaptions(e.target.checked)}
+          disabled={busy}
+          className="accent-primary"
+        />
+        Burn in captions
+      </label>
       {error && <span className="text-xs text-destructive">{error}</span>}
-      <Button size="sm" onClick={handleExport} disabled={busy}>
-        {status === "queued" ? "Queued…" : status === "processing" ? "Rendering…" : "Export"}
-      </Button>
+      {status === "completed" && downloadUrl ? (
+        <>
+          <Button asChild size="sm">
+            <a href={downloadUrl} download>
+              Download
+            </a>
+          </Button>
+          <Button variant="ghost" size="xs" onClick={handleExport}>
+            Re-export
+          </Button>
+        </>
+      ) : (
+        <Button size="sm" onClick={handleExport} disabled={busy}>
+          {status === "queued" ? "Queued…" : status === "processing" ? "Rendering…" : "Export"}
+        </Button>
+      )}
     </div>
   );
 }
