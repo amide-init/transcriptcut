@@ -5,18 +5,25 @@ type TranscriptStore = {
   transcript: Transcript | null;
   /** ids of words currently selected for deletion, in click order */
   selectedWordIds: string[];
+  /** ids of words flagged as filler by the last detection pass */
+  fillerWordIds: string[];
+  detectingFillerWords: boolean;
 
   setTranscript: (transcript: Transcript | null) => void;
   toggleWordSelection: (wordId: string) => void;
   selectWordRange: (fromWordId: string, toWordId: string) => void;
   clearSelection: () => void;
+  setFillerWordIds: (ids: string[]) => void;
+  setDetectingFillerWords: (detecting: boolean) => void;
 };
 
 export const useTranscriptStore = create<TranscriptStore>((set, get) => ({
   transcript: null,
   selectedWordIds: [],
+  fillerWordIds: [],
+  detectingFillerWords: false,
 
-  setTranscript: (transcript) => set({ transcript, selectedWordIds: [] }),
+  setTranscript: (transcript) => set({ transcript, selectedWordIds: [], fillerWordIds: [] }),
 
   toggleWordSelection: (wordId) =>
     set((s) => ({
@@ -37,4 +44,7 @@ export const useTranscriptStore = create<TranscriptStore>((set, get) => ({
   },
 
   clearSelection: () => set({ selectedWordIds: [] }),
+
+  setFillerWordIds: (fillerWordIds) => set({ fillerWordIds }),
+  setDetectingFillerWords: (detectingFillerWords) => set({ detectingFillerWords }),
 }));
