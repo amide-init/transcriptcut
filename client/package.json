@@ -9,8 +9,6 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@langchain/core": "^1.2.11",
-    "@langchain/langgraph": "^1.4.15",
     "@prisma/adapter-better-sqlite3": "^7.10.0",
     "@prisma/client": "^7.10.0",
     "better-sqlite3": "^13.0.3",
