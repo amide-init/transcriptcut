@@ -3,8 +3,9 @@
 Edit video by editing its transcript, and by giving natural-language
 commands to an AI editor. **Local-first and open source** — runs entirely
 on your machine, no cloud account required. See [`claude.md`](./claude.md)
-for the full product spec and [`issues.md`](./issues.md) for current build
-status.
+for the full product spec and the
+[issue tracker](https://github.com/amide-init/vdescript/issues) for
+current build status.
 
 ## Status
 
@@ -15,10 +16,10 @@ timeline and skipped during playback, with undo/redo. A Descript-style
 filters drawer applies visual presets to the preview.
 
 Local persistence (SQLite via Prisma + the local filesystem), project
-CRUD, and the separate `server/` are not yet built — see
-[`issues.md`](./issues.md) for the full breakdown of what's done vs.
-planned. Everything currently runs inside the `client/` Next.js app,
-including the API routes.
+CRUD, and the separate `server/` are not yet built — see the
+[issue tracker](https://github.com/amide-init/vdescript/issues) for the
+full breakdown of what's done vs. planned. Everything currently runs
+inside the `client/` Next.js app, including the API routes.
 
 There is no login — v1 is a single local user by design, not a gap to
 fill in. **Don't expose this to a public or shared network** without
@@ -28,7 +29,6 @@ adding real authentication first; see `claude.md` section 18.
 
 ```text
 claude.md    — product spec
-issues.md    — issue tracker / build status
 client/      — Next.js app (editor UI + API routes)
 server/      — reserved for future use, not in use yet
 ```
