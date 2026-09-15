@@ -1227,3 +1227,48 @@ The product should feel like:
 The traditional timeline remains available, but AI + transcript should be the primary interaction model.
 
 Build the smallest reliable version of this experience first.
+
+---
+
+# 34. Commit Discipline (OSS)
+
+This project is open source. Git history is public-facing documentation,
+not just internal bookkeeping — treat every commit as something a
+stranger will read, because eventually one will.
+
+## Before every commit
+
+* Run `git status` and review the actual diff (not just what you *meant*
+  to change) before staging anything.
+* Never commit `.env` files, API keys, tokens, or any other secret, even
+  temporarily. Check by eye — don't rely on `.gitignore` alone to catch a
+  mistake.
+* Never commit `data/`, `node_modules/`, generated build output, or the
+  SQLite database file. These are gitignored on purpose (section 15) —
+  if one shows up as unstaged/untracked and you're not sure why, stop and
+  find out before adding it.
+* Never commit real user-uploaded video/audio/transcript content used for
+  local testing. Test fixtures that do get committed must be synthetic
+  (e.g. generated speech), never a real recording or real personal data.
+* Make sure commit messages and code comments don't leak personal
+  information — real names, email addresses, local machine paths, etc. —
+  beyond what's already intentionally public in the repo.
+
+## Shape of a commit
+
+* Prefer several small, logically atomic commits over one large one — one
+  commit per concern (schema, storage layer, API routes, frontend wiring,
+  and so on), mirroring how the feature was actually built, the way a
+  careful human contributor would submit a PR.
+* Each commit message explains *why*, not just *what* — the diff already
+  shows what changed; the message is for the part that isn't obvious from
+  the code.
+* Every commit should build and lint cleanly on its own. Don't commit a
+  known-broken intermediate state, even if a later commit in the same
+  batch fixes it.
+* Never rewrite or force-push history that's already been pushed to
+  `main`.
+
+None of this is optional polish. For an OSS project, the commit history
+is part of what contributors read to understand the codebase — treat it
+with the same care as the code itself.
