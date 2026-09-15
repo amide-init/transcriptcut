@@ -6,6 +6,7 @@ import { useTimelineStore } from "@/stores/timeline-store";
 import { VideoPlayer } from "@/components/video-player/VideoPlayer";
 import { TranscriptPanel } from "@/components/transcript/TranscriptPanel";
 import { Timeline } from "@/components/timeline/Timeline";
+import { FilterDrawer } from "@/components/editor/FilterDrawer";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -29,6 +30,7 @@ export function EditorLayout({ videoUrl }: { videoUrl: string }) {
           <Button variant="outline" size="sm" onClick={handleNewProject}>
             New project
           </Button>
+          <FilterDrawer />
           <Tooltip>
             <TooltipTrigger asChild>
               <span>

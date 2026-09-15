@@ -84,3 +84,17 @@ The core loop: view video and transcript side by side, delete transcript text, s
 **Spec refs:** sections 1 (#5–#7), 2 (Video Editor, Transcript Editing), 8, 10, 11, 16, 19, 20, 26 (Editor)
 
 ---
+
+## #6 — Filters drawer (Descript-style) — **done, preview-only**
+
+A right-side drawer of visual filter presets (None, Black & white, Vintage,
+Warm, Cool, High contrast, Faded), applied live to the video preview.
+
+- `FilterDrawer.tsx`: grabs a still frame from the live video via canvas the moment the drawer opens, previews every preset against that real frame
+- Selection stored on `useProjectStore.filterId`, applied as a CSS `filter` on the `<video>` element in `VideoPlayer` — instant, no re-encode
+- `lib/video/filters.ts` holds the preset definitions (CSS `filter` strings)
+- Preview-only by design: this is not in the FFmpeg render pipeline yet (export is still stubbed) — will need to become an actual FFmpeg `-vf` filter mapping once rendering exists, not just a browser CSS filter
+
+**Spec refs:** section 26 (Editor toolbar); explicitly lightweight vs. section 28's "advanced color grading" (out of MVP scope) — this is presets only, no manual grading controls
+
+---
