@@ -1,14 +1,16 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { usePlayerStore } from "@/stores/player-store";
 import { useTimelineStore } from "@/stores/timeline-store";
+import { useTranscriptStore } from "@/stores/transcript-store";
 import {
   computePlayableRanges,
   editedTimeToSourceTime,
   getEditedDuration,
   sourceTimeToEditedTime,
 } from "@/lib/timeline/cuts";
+import { detectSilences, type SilenceGap } from "@/lib/timeline/silence";
 import { Button } from "@/components/ui/button";
 import type { CutOperation } from "@/types/edit-operation";
 
@@ -20,12 +22,16 @@ function formatTimecode(seconds: number): string {
 
 export function Timeline() {
   const trackRef = useRef<HTMLDivElement>(null);
+  const [silenceGaps, setSilenceGaps] = useState<SilenceGap[] | null>(null);
 
   const duration = usePlayerStore((s) => s.duration);
   const currentTime = usePlayerStore((s) => s.currentTime);
   const seek = usePlayerStore((s) => s.seek);
 
+  const transcript = useTranscriptStore((s) => s.transcript);
+
   const operations = useTimelineStore((s) => s.operations);
+  const addCut = useTimelineStore((s) => s.addCut);
   const undo = useTimelineStore((s) => s.undo);
   const redo = useTimelineStore((s) => s.redo);
   const redoStack = useTimelineStore((s) => s.redoStack);
@@ -51,6 +57,19 @@ export function Timeline() {
     seek(sourceTime);
   };
 
+  const handleFindSilences = () => {
+    if (!transcript) return;
+    setSilenceGaps(detectSilences(transcript));
+  };
+
+  const handleRemoveSilences = () => {
+    if (!silenceGaps) return;
+    for (const gap of silenceGaps) {
+      addCut(gap.start, gap.end, "long pause");
+    }
+    setSilenceGaps(null);
+  };
+
   return (
     <div className="flex flex-col gap-2">
       <div className="flex h-7 items-center justify-between">
@@ -67,6 +86,25 @@ export function Timeline() {
           </span>
         </div>
         <div className="flex gap-1.5">
+          {silenceGaps && silenceGaps.length > 0 ? (
+            <>
+              <Button variant="ghost" size="xs" onClick={() => setSilenceGaps(null)}>
+                Dismiss
+              </Button>
+              <Button variant="destructive" size="xs" onClick={handleRemoveSilences}>
+                Remove {silenceGaps.length === 1 ? "1 pause" : `${silenceGaps.length} pauses`}
+              </Button>
+            </>
+          ) : (
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={handleFindSilences}
+              disabled={!transcript}
+            >
+              {silenceGaps ? "No long pauses found" : "Find long pauses"}
+            </Button>
+          )}
           <Button
             variant="outline"
             size="xs"
@@ -93,6 +131,18 @@ export function Timeline() {
             title={`${r.start.toFixed(1)}s – ${r.end.toFixed(1)}s`}
           />
         ))}
+        {silenceGaps?.map((gap, i) => {
+          const left = (sourceTimeToEditedTime(gap.start, playableRanges) / editedDuration) * 100;
+          const right = (sourceTimeToEditedTime(gap.end, playableRanges) / editedDuration) * 100;
+          return (
+            <div
+              key={i}
+              className="pointer-events-none absolute top-0 h-full bg-muted-foreground/50"
+              style={{ left: `${left}%`, width: `${right - left}%` }}
+              title={`Long pause: ${(gap.end - gap.start).toFixed(1)}s`}
+            />
+          );
+        })}
         <div
           className="pointer-events-none absolute top-0 h-full w-0.5 bg-primary"
           style={{ left: `${playheadPosition}%` }}
