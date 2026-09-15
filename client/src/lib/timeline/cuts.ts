@@ -1,5 +1,6 @@
 import type { CutOperation } from "@/types/edit-operation";
 import type { PlayableRange } from "@/types/timeline";
+import type { TranscriptWord } from "@/types/transcript";
 
 /** Merge overlapping/adjacent cut ranges and sort by start time. */
 function mergeCuts(cuts: CutOperation[]): { start: number; end: number }[] {
@@ -49,6 +50,16 @@ export function getEditedDuration(ranges: PlayableRange[]): number {
 /** Is this source-time instant inside a cut (i.e. not in any playable range)? */
 export function isCut(sourceTime: number, ranges: PlayableRange[]): boolean {
   return !ranges.some((r) => sourceTime >= r.start && sourceTime < r.end);
+}
+
+/** Is this [start, end) word/sentence/segment range entirely covered by a cut? */
+export function isWordCut(start: number, end: number, cuts: CutOperation[]): boolean {
+  return cuts.some((c) => start >= c.start && end <= c.end + 0.001);
+}
+
+/** Are every one of these words individually cut (e.g. a whole sentence/segment)? */
+export function isFullyCut(words: TranscriptWord[], cuts: CutOperation[]): boolean {
+  return words.length > 0 && words.every((w) => isWordCut(w.start, w.end, cuts));
 }
 
 /**

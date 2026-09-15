@@ -9,16 +9,8 @@ import { useProjectStore } from "@/stores/project-store";
 import { Button } from "@/components/ui/button";
 import { SpeakerLabel } from "@/components/transcript/SpeakerLabel";
 import { splitIntoSentences } from "@/lib/timeline/sentences";
+import { isWordCut, isFullyCut } from "@/lib/timeline/cuts";
 import type { CutOperation } from "@/types/edit-operation";
-import type { TranscriptWord } from "@/types/transcript";
-
-function isWordCut(start: number, end: number, cuts: CutOperation[]): boolean {
-  return cuts.some((c) => start >= c.start && end <= c.end + 0.001);
-}
-
-function isFullyCut(words: TranscriptWord[], cuts: CutOperation[]): boolean {
-  return words.length > 0 && words.every((w) => isWordCut(w.start, w.end, cuts));
-}
 
 export function TranscriptPanel() {
   const transcript = useTranscriptStore((s) => s.transcript);
