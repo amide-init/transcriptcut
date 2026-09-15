@@ -1,16 +1,23 @@
 "use client";
 
 import { useMemo } from "react";
+import { X } from "lucide-react";
 import { useTranscriptStore } from "@/stores/transcript-store";
 import { useTimelineStore } from "@/stores/timeline-store";
 import { usePlayerStore } from "@/stores/player-store";
 import { useProjectStore } from "@/stores/project-store";
 import { Button } from "@/components/ui/button";
 import { SpeakerLabel } from "@/components/transcript/SpeakerLabel";
+import { splitIntoSentences } from "@/lib/timeline/sentences";
 import type { CutOperation } from "@/types/edit-operation";
+import type { TranscriptWord } from "@/types/transcript";
 
 function isWordCut(start: number, end: number, cuts: CutOperation[]): boolean {
   return cuts.some((c) => start >= c.start && end <= c.end + 0.001);
+}
+
+function isFullyCut(words: TranscriptWord[], cuts: CutOperation[]): boolean {
+  return words.length > 0 && words.every((w) => isWordCut(w.start, w.end, cuts));
 }
 
 export function TranscriptPanel() {
@@ -90,6 +97,14 @@ export function TranscriptPanel() {
     setFillerWordIds([]);
   };
 
+  const handleDeleteSentence = (start: number, end: number) => {
+    addCut(start, end, "sentence");
+  };
+
+  const handleDeleteSegment = (start: number, end: number) => {
+    addCut(start, end, "segment");
+  };
+
   const handleSpeakerChange = (segmentId: string, speaker: string | null) => {
     setSegmentSpeaker(segmentId, speaker);
     if (!projectId) return;
@@ -142,43 +157,78 @@ export function TranscriptPanel() {
           // Unset is never "the same speaker" as another unset segment --
           // only dedupe the label when both are the same real, assigned name.
           const showSpeakerLabel = !segment.speaker || segment.speaker !== previousSpeaker;
+          const segmentFullyCut = isFullyCut(segment.words, cuts);
+          const sentences = splitIntoSentences(segment);
           return (
-            <div key={segment.id}>
-              {showSpeakerLabel && (
-                <div className="mb-1">
-                  <SpeakerLabel
-                    speaker={segment.speaker}
-                    onChange={(speaker) => handleSpeakerChange(segment.id, speaker)}
-                  />
+            <div key={segment.id} className="group/segment">
+              {(showSpeakerLabel || !segmentFullyCut) && (
+                <div className="mb-1 flex h-5 items-center justify-between">
+                  {showSpeakerLabel ? (
+                    <SpeakerLabel
+                      speaker={segment.speaker}
+                      onChange={(speaker) => handleSpeakerChange(segment.id, speaker)}
+                    />
+                  ) : (
+                    <span />
+                  )}
+                  {!segmentFullyCut && (
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      className="text-destructive opacity-0 hover:text-destructive group-hover/segment:opacity-100"
+                      onClick={() => handleDeleteSegment(segment.start, segment.end)}
+                    >
+                      Delete segment
+                    </Button>
+                  )}
                 </div>
               )}
               <p>
-                {segment.words.map((word) => {
-                  const cut = isWordCut(word.start, word.end, cuts);
-                  const selected = selectedWordIds.includes(word.id);
-                  const active = currentTime >= word.start && currentTime < word.end;
-                  const filler = fillerWordIdSet.has(word.id);
+                {sentences.map((sentence) => {
+                  const sentenceFullyCut = isFullyCut(sentence.words, cuts);
                   return (
                     <span
-                      key={word.id}
-                      onClick={(e) => {
-                        if (cut) return;
-                        seek(word.start);
-                        handleWordClick(word.id, e);
-                      }}
-                      className={[
-                        "cursor-pointer rounded px-0.5 transition-colors",
-                        cut
-                          ? "text-muted-foreground/50 line-through decoration-destructive/70"
-                          : "",
-                        selected ? "bg-accent/30" : "",
-                        active && !cut ? "bg-primary/25" : "",
-                        filler && !cut
-                          ? "underline decoration-dotted decoration-muted-foreground underline-offset-4"
-                          : "",
-                      ].join(" ")}
+                      key={sentence.words[0].id}
+                      className="group/sentence rounded hover:bg-muted/40"
                     >
-                      {word.text}{" "}
+                      {sentence.words.map((word) => {
+                        const cut = isWordCut(word.start, word.end, cuts);
+                        const selected = selectedWordIds.includes(word.id);
+                        const active = currentTime >= word.start && currentTime < word.end;
+                        const filler = fillerWordIdSet.has(word.id);
+                        return (
+                          <span
+                            key={word.id}
+                            onClick={(e) => {
+                              if (cut) return;
+                              seek(word.start);
+                              handleWordClick(word.id, e);
+                            }}
+                            className={[
+                              "cursor-pointer rounded px-0.5 transition-colors",
+                              cut
+                                ? "text-muted-foreground/50 line-through decoration-destructive/70"
+                                : "",
+                              selected ? "bg-accent/30" : "",
+                              active && !cut ? "bg-primary/25" : "",
+                              filler && !cut
+                                ? "underline decoration-dotted decoration-muted-foreground underline-offset-4"
+                                : "",
+                            ].join(" ")}
+                          >
+                            {word.text}{" "}
+                          </span>
+                        );
+                      })}
+                      {!sentenceFullyCut && (
+                        <button
+                          onClick={() => handleDeleteSentence(sentence.start, sentence.end)}
+                          className="hidden size-4 -translate-y-px items-center justify-center rounded text-muted-foreground hover:text-destructive group-hover/sentence:inline-flex"
+                          title="Delete sentence"
+                        >
+                          <X className="size-3" />
+                        </button>
+                      )}
                     </span>
                   );
                 })}
