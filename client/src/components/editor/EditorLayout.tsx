@@ -1,9 +1,8 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { ChevronLeft } from "lucide-react";
 import { useProjectStore } from "@/stores/project-store";
-import { useTranscriptStore } from "@/stores/transcript-store";
-import { useTimelineStore } from "@/stores/timeline-store";
 import { VideoPlayer } from "@/components/video-player/VideoPlayer";
 import { TranscriptPanel } from "@/components/transcript/TranscriptPanel";
 import { Timeline } from "@/components/timeline/Timeline";
@@ -12,27 +11,22 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 export function EditorLayout({ videoUrl }: { videoUrl: string }) {
-  const router = useRouter();
   const name = useProjectStore((s) => s.name);
-  const resetProject = useProjectStore((s) => s.reset);
-  const resetTranscript = useTranscriptStore((s) => s.setTranscript);
-  const resetTimeline = useTimelineStore((s) => s.reset);
-
-  const handleNewProject = () => {
-    resetProject();
-    resetTranscript(null);
-    resetTimeline();
-    router.push("/");
-  };
 
   return (
     <div className="flex h-screen flex-col gap-3 p-3">
       <header className="flex items-center justify-between">
-        <h1 className="text-[0.95rem] font-medium">{name}</h1>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+          >
+            <ChevronLeft className="size-4" />
+            Projects
+          </Link>
+          <h1 className="text-[0.95rem] font-medium">{name}</h1>
+        </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={handleNewProject}>
-            New project
-          </Button>
           <FilterDrawer />
           <Tooltip>
             <TooltipTrigger asChild>

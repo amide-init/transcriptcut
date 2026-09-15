@@ -2,6 +2,8 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { ChevronLeft } from "lucide-react";
 import { useProjectStore } from "@/stores/project-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -87,6 +89,16 @@ export function UploadScreen() {
   return (
     <div className="flex h-screen flex-col items-center justify-center px-4">
       <div className="w-full max-w-sm space-y-6">
+        {!busy && (
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+          >
+            <ChevronLeft className="size-4" />
+            Projects
+          </Link>
+        )}
+
         <div className="space-y-1.5">
           <h1 className="text-xl font-medium">New project</h1>
           <p className="text-[0.9rem] leading-relaxed text-muted-foreground">
