@@ -2,12 +2,25 @@ import type { PlayableRange } from "@/types/timeline";
 import { getFfmpegFilter } from "@/lib/ffmpeg/filters";
 
 /**
+ * Escapes a file path for use as the subtitles filter's filename option.
+ * The filtergraph parser uses ':' as an option separator and '\' as its
+ * own escape character, so a Windows-style absolute path (drive-letter
+ * colon, backslash separators) would otherwise break the filter string.
+ * Converting backslashes to '/' first is safe -- ffmpeg accepts forward
+ * slashes on Windows too -- then any remaining ':' (the drive letter) is
+ * escaped for the parser.
+ */
+function escapeSubtitlesPath(p: string): string {
+  return p.replace(/\\/g, "/").replace(/:/g, "\\:");
+}
+
+/**
  * Builds the full ffmpeg argv (as an array, never a shell string) for
  * rendering a project: cut out everything except the playable ranges
  * (the same ranges the browser preview computes via
  * lib/timeline/cuts.ts#computePlayableRanges, so what renders matches
  * what was previewed), concatenate what's left, and apply the selected
- * filter preset.
+ * filter preset and, optionally, burned-in captions.
  *
  * Returns an argv array for execFile -- never build a shell command
  * string from these values (spec section 18: never interpolate
@@ -19,8 +32,10 @@ export function buildRenderArgs(args: {
   outputPath: string;
   playableRanges: PlayableRange[];
   filterId: string;
+  /** Absolute path to an .srt file to burn in, if captions were requested. */
+  srtPath?: string;
 }): string[] {
-  const { inputPath, outputPath, playableRanges, filterId } = args;
+  const { inputPath, outputPath, playableRanges, filterId, srtPath } = args;
 
   if (playableRanges.length === 0) {
     throw new Error("Nothing to render -- the entire video has been cut.");
@@ -47,6 +62,13 @@ export function buildRenderArgs(args: {
   if (ffmpegFilter) {
     filterChains.push(`[outv]${ffmpegFilter}[filtered]`);
     videoOutLabel = "[filtered]";
+  }
+
+  if (srtPath) {
+    filterChains.push(
+      `${videoOutLabel}subtitles='${escapeSubtitlesPath(srtPath)}'[captioned]`
+    );
+    videoOutLabel = "[captioned]";
   }
 
   return [

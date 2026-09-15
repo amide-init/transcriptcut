@@ -1,11 +1,14 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "@/lib/db/client";
 import { resolveInDataDir, statAsset } from "@/lib/storage/local";
 import { computePlayableRanges } from "@/lib/timeline/cuts";
 import { buildRenderArgs } from "@/lib/ffmpeg/plan";
 import { runFfmpeg } from "@/lib/ffmpeg/run";
+import { generateCaptions } from "@/lib/captions/generate";
+import { toSrt } from "@/lib/captions/format";
 import type { CutOperation, EditOperation } from "@/types/edit-operation";
+import type { Transcript } from "@/types/transcript";
 
 /**
  * Runs one render job to completion and updates its RenderJob row along the
@@ -13,14 +16,14 @@ import type { CutOperation, EditOperation } from "@/types/edit-operation";
  * from the render API route -- never awaited by the request handler, per
  * spec section 14: never block the API request on FFmpeg.
  */
-export async function runRenderJob(jobId: string): Promise<void> {
+export async function runRenderJob(jobId: string, options: { burnInCaptions?: boolean } = {}): Promise<void> {
   try {
     await prisma.renderJob.update({ where: { id: jobId }, data: { status: "processing" } });
 
     const job = await prisma.renderJob.findUniqueOrThrow({ where: { id: jobId } });
     const project = await prisma.project.findUnique({
       where: { id: job.projectId },
-      include: { assets: true, editOperations: true },
+      include: { assets: true, editOperations: true, transcript: true },
     });
     if (!project) throw new Error("Project not found.");
     if (project.duration === null) throw new Error("Video duration isn't known yet -- open the project once first.");
@@ -38,11 +41,25 @@ export async function runRenderJob(jobId: string): Promise<void> {
     const outputPath = resolveInDataDir(outputRelativePath);
     await mkdir(path.dirname(outputPath), { recursive: true });
 
+    let srtPath: string | undefined;
+    if (options.burnInCaptions) {
+      if (!project.transcript) throw new Error("Captions were requested but this project has no transcript.");
+      const transcript: Transcript = {
+        id: project.transcript.id,
+        segments: JSON.parse(project.transcript.segmentsJson),
+      };
+      const cues = generateCaptions(transcript, cuts, project.duration);
+      const srtRelativePath = path.posix.join("projects", project.id, "render", `${jobId}.srt`);
+      srtPath = resolveInDataDir(srtRelativePath);
+      await writeFile(srtPath, toSrt(cues), "utf-8");
+    }
+
     const args = buildRenderArgs({
       inputPath,
       outputPath,
       playableRanges,
       filterId: project.filterId,
+      srtPath,
     });
     await runFfmpeg(args);
 

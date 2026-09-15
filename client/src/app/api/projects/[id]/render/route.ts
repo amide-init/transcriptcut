@@ -10,8 +10,16 @@ function errorResponse(code: string, message: string, status: number) {
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-export async function POST(_request: Request, { params }: RouteContext) {
+export async function POST(request: Request, { params }: RouteContext) {
   const { id } = await params;
+
+  let burnInCaptions = false;
+  try {
+    const body = await request.json();
+    burnInCaptions = body?.burnInCaptions === true;
+  } catch {
+    // No body (or invalid JSON) just means "no captions" -- not an error.
+  }
 
   const project = await prisma.project.findUnique({
     where: { id },
@@ -29,7 +37,7 @@ export async function POST(_request: Request, { params }: RouteContext) {
   });
 
   // Fire-and-forget: never block the request on FFmpeg (spec section 14).
-  void runRenderJob(job.id);
+  void runRenderJob(job.id, { burnInCaptions });
 
   return NextResponse.json({ success: true, jobId: job.id }, { status: 202 });
 }
