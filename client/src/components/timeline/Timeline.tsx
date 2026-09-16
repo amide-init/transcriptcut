@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { usePlayerStore } from "@/stores/player-store";
+import { useProjectStore } from "@/stores/project-store";
 import { useTimelineStore } from "@/stores/timeline-store";
 import { useTranscriptStore } from "@/stores/transcript-store";
 import {
@@ -12,7 +13,9 @@ import {
 } from "@/lib/timeline/cuts";
 import { detectSilences, type SilenceGap } from "@/lib/timeline/silence";
 import { formatTimecode } from "@/lib/timeline/format";
+import { useWaveform } from "@/lib/timeline/useWaveform";
 import { Button } from "@/components/ui/button";
+import { Waveform } from "@/components/timeline/Waveform";
 import type { CutOperation } from "@/types/edit-operation";
 
 export function Timeline() {
@@ -24,6 +27,9 @@ export function Timeline() {
   const seek = usePlayerStore((s) => s.seek);
 
   const transcript = useTranscriptStore((s) => s.transcript);
+
+  const videoUrl = useProjectStore((s) => s.videoUrl);
+  const audioBuffer = useWaveform(videoUrl);
 
   const operations = useTimelineStore((s) => s.operations);
   const addCut = useTimelineStore((s) => s.addCut);
@@ -143,6 +149,19 @@ export function Timeline() {
           style={{ left: `${playheadPosition}%` }}
         />
       </div>
+      {audioBuffer && editedDuration > 0 && (
+        <div className="flex h-8 w-full overflow-hidden rounded-md bg-muted">
+          {playableRanges.map((r, i) => (
+            <div
+              key={i}
+              style={{ width: `${((r.end - r.start) / editedDuration) * 100}%` }}
+              className="h-full border-r border-background last:border-r-0"
+            >
+              <Waveform buffer={audioBuffer} start={r.start} end={r.end} />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
