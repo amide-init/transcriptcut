@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useProjectStore } from "@/stores/project-store";
+import { useCaptionStyleStore } from "@/stores/caption-style-store";
 import { Button } from "@/components/ui/button";
 import { CaptionStyleControls } from "@/components/editor/CaptionStyleControls";
-import { DEFAULT_CAPTION_STYLE, type CaptionStyle } from "@/lib/captions/style";
 
 type JobStatus = "queued" | "processing" | "completed" | "failed";
 type JobResponse =
@@ -18,8 +18,10 @@ export function ExportButton() {
   const [status, setStatus] = useState<JobStatus | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [burnInCaptions, setBurnInCaptions] = useState(false);
-  const [captionStyle, setCaptionStyle] = useState<CaptionStyle>(DEFAULT_CAPTION_STYLE);
+  const burnInCaptions = useCaptionStyleStore((s) => s.burnInCaptions);
+  const setBurnInCaptions = useCaptionStyleStore((s) => s.setBurnInCaptions);
+  const captionStyle = useCaptionStyleStore((s) => s.style);
+  const setCaptionStyle = useCaptionStyleStore((s) => s.setStyle);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {

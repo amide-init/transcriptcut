@@ -4,7 +4,10 @@ import { useEffect, useRef } from "react";
 import { Pause, Play } from "lucide-react";
 import { usePlayerStore } from "@/stores/player-store";
 import { useTimelineStore } from "@/stores/timeline-store";
+import { useTranscriptStore } from "@/stores/transcript-store";
 import { useProjectStore } from "@/stores/project-store";
+import { useCaptionStyleStore } from "@/stores/caption-style-store";
+import type { CaptionPosition } from "@/lib/captions/style";
 import {
   computePlayableRanges,
   editedTimeToSourceTime,
@@ -13,9 +16,17 @@ import {
   nextPlayableTime,
   sourceTimeToEditedTime,
 } from "@/lib/timeline/cuts";
+import { generateCaptions } from "@/lib/captions/generate";
 import { formatTimecode } from "@/lib/timeline/format";
 import { getFilterPreset } from "@/lib/video/filters";
 import type { CutOperation } from "@/types/edit-operation";
+
+/** Approximates libass's numpad-alignment vertical placement (see lib/captions/style.ts). */
+const CAPTION_POSITION_CLASS: Record<CaptionPosition, string> = {
+  top: "top-3",
+  middle: "top-1/2 -translate-y-1/2",
+  bottom: "bottom-3",
+};
 
 export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -52,6 +63,14 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
   const editedCurrentTime =
     editedDuration > 0 ? sourceTimeToEditedTime(currentTime, playableRanges) : 0;
   const playheadPosition = editedDuration > 0 ? (editedCurrentTime / editedDuration) * 100 : 0;
+
+  const transcript = useTranscriptStore((s) => s.transcript);
+  const captionCues = transcript && duration > 0 ? generateCaptions(transcript, cuts, duration) : [];
+  const activeCue = captionCues.find(
+    (c) => editedCurrentTime >= c.start && editedCurrentTime < c.end
+  );
+  const captionStyle = useCaptionStyleStore((s) => s.style);
+  const burnInCaptions = useCaptionStyleStore((s) => s.burnInCaptions);
 
   const togglePlay = () => {
     const video = videoRef.current;
@@ -110,17 +129,39 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
 
   return (
     <div className="flex h-full w-full flex-col bg-black">
-      <video
-        ref={videoRef}
-        src={videoUrl}
-        className="w-full min-h-0 flex-1 object-contain"
-        style={{ filter: filterCss }}
-        onLoadedMetadata={(e) => handleDurationKnown(e.currentTarget.duration)}
-        onTimeUpdate={handleTimeUpdate}
-        onPlay={() => setIsPlaying(true)}
-        onPause={() => setIsPlaying(false)}
-        data-playing={isPlaying}
-      />
+      <div className="relative min-h-0 flex-1">
+        <video
+          ref={videoRef}
+          src={videoUrl}
+          className="h-full w-full object-contain"
+          style={{ filter: filterCss }}
+          onLoadedMetadata={(e) => handleDurationKnown(e.currentTarget.duration)}
+          onTimeUpdate={handleTimeUpdate}
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
+          data-playing={isPlaying}
+        />
+        {burnInCaptions && activeCue && (
+          <div
+            className={`pointer-events-none absolute inset-x-0 flex justify-center px-4 ${CAPTION_POSITION_CLASS[captionStyle.position]}`}
+          >
+            <span
+              className={`max-w-[90%] text-center font-medium ${captionStyle.background ? "rounded bg-black/70 px-2.5 py-1" : "px-1"}`}
+              style={{
+                fontFamily: captionStyle.font,
+                fontSize: `${captionStyle.fontSize}px`,
+                color: captionStyle.textColor,
+                WebkitTextStroke: `1px ${captionStyle.outlineColor}`,
+                textShadow: captionStyle.background
+                  ? undefined
+                  : `0 0 3px ${captionStyle.outlineColor}`,
+              }}
+            >
+              {activeCue.text}
+            </span>
+          </div>
+        )}
+      </div>
       <div className="flex h-9 shrink-0 items-center gap-2 border-t border-white/10 px-2">
         <button
           type="button"
