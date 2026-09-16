@@ -31,9 +31,11 @@ export function EditorLayout({ videoUrl }: { videoUrl: string }) {
         </div>
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-cols-2 gap-3">
-        <div className="min-h-0 overflow-hidden rounded-lg border border-border bg-black">
-          <VideoPlayer videoUrl={videoUrl} />
+      <div className="grid min-h-0 flex-1 grid-cols-[2fr_3fr] gap-3">
+        <div className="flex min-h-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-black">
+          <div className="aspect-video w-full max-h-full">
+            <VideoPlayer videoUrl={videoUrl} />
+          </div>
         </div>
         <div className="min-h-0 overflow-hidden rounded-lg border border-border bg-card">
           <TranscriptPanel />
