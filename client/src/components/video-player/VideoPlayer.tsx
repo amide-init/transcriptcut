@@ -19,6 +19,7 @@ import {
 import { generateCaptions } from "@/lib/captions/generate";
 import { formatTimecode } from "@/lib/timeline/format";
 import { getFilterPreset } from "@/lib/video/filters";
+import { buildPropertiesCss } from "@/lib/video/properties";
 import type { CutOperation } from "@/types/edit-operation";
 
 /** Approximates libass's numpad-alignment vertical placement (see lib/captions/style.ts). */
@@ -44,7 +45,10 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
   const setVideoElement = usePlayerStore((s) => s.setVideoElement);
 
   const filterId = useProjectStore((s) => s.filterId);
-  const filterCss = getFilterPreset(filterId).css;
+  const properties = useProjectStore((s) => s.properties);
+  const filterCss = [getFilterPreset(filterId).css, buildPropertiesCss(properties)]
+    .filter((v) => v && v !== "none")
+    .join(" ");
   const persistDuration = useProjectStore((s) => s.setDuration);
   const durationPersisted = useRef(false);
 

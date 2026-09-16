@@ -48,6 +48,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
       filterId: project.filterId,
       burnInCaptions: project.burnInCaptions,
       captionStyle: project.captionStyleJson ? JSON.parse(project.captionStyleJson) : null,
+      properties: project.propertiesJson ? JSON.parse(project.propertiesJson) : null,
       createdAt: project.createdAt,
       updatedAt: project.updatedAt,
     },

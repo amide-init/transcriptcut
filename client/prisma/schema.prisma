@@ -19,6 +19,8 @@ model Project {
   burnInCaptions Boolean @default(false)
   /// JSON-serialized CaptionStyle (see src/lib/captions/style.ts), null = use the client default.
   captionStyleJson String?
+  /// JSON-serialized VideoProperties (see src/types/video-properties.ts), null = use the client default (all zero).
+  propertiesJson String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

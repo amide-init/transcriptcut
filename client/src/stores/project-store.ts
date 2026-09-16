@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { DEFAULT_VIDEO_PROPERTIES, type VideoProperties } from "@/types/video-properties";
 
 export type ProjectStatus = "empty" | "creating" | "uploading" | "transcribing" | "ready" | "error";
 
@@ -10,6 +11,8 @@ type ProjectStore = {
   error: string | null;
   /** Id of the selected preview filter (see lib/video/filters.ts), "none" by default. */
   filterId: string;
+  /** Manual color-adjustment sliders, layered on top of the filter preset. */
+  properties: VideoProperties;
 
   /** Updates local state and persists to the backend (fire-and-forget). */
   setName: (name: string) => void;
@@ -18,10 +21,18 @@ type ProjectStore = {
   setError: (error: string | null) => void;
   /** Updates local state and persists to the backend (fire-and-forget). */
   setFilterId: (id: string) => void;
+  /** Updates local state immediately; persists debounced (sliders fire on every drag tick). */
+  setProperties: (properties: VideoProperties) => void;
   /** Persist the video duration once known client-side (fire-and-forget). */
   setDuration: (seconds: number) => void;
   /** Load a persisted project into the store (editor page on mount). */
-  hydrate: (project: { id: string; name: string; filterId: string; videoUrl: string | null }) => void;
+  hydrate: (project: {
+    id: string;
+    name: string;
+    filterId: string;
+    properties: VideoProperties | null;
+    videoUrl: string | null;
+  }) => void;
   reset: () => void;
 };
 
@@ -32,7 +43,11 @@ const initialState = {
   status: "empty" as ProjectStatus,
   error: null as string | null,
   filterId: "none",
+  properties: DEFAULT_VIDEO_PROPERTIES,
 };
+
+let propertiesDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+const PROPERTIES_DEBOUNCE_MS = 400;
 
 export const useProjectStore = create<ProjectStore>((set, get) => ({
   ...initialState,
@@ -62,6 +77,20 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     }).catch((err) => console.error("Failed to persist filter:", err));
   },
 
+  setProperties: (properties) => {
+    set({ properties });
+    const { id } = get();
+    if (!id) return;
+    if (propertiesDebounceTimer) clearTimeout(propertiesDebounceTimer);
+    propertiesDebounceTimer = setTimeout(() => {
+      fetch(`/api/projects/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ properties }),
+      }).catch((err) => console.error("Failed to persist video properties:", err));
+    }, PROPERTIES_DEBOUNCE_MS);
+  },
+
   setDuration: (duration) => {
     const { id } = get();
     if (!id) return;
@@ -77,6 +106,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       id: project.id,
       name: project.name,
       filterId: project.filterId,
+      properties: project.properties ?? DEFAULT_VIDEO_PROPERTIES,
       videoUrl: project.videoUrl,
       status: "ready",
       error: null,

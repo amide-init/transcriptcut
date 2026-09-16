@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { captionStyleSchema } from "@/lib/validation/caption-style";
+import { videoPropertiesSchema } from "@/lib/validation/video-properties";
 
 export const createProjectSchema = z.object({
   name: z.string().trim().min(1).max(200),
@@ -14,12 +15,15 @@ export const updateProjectSchema = z
     burnInCaptions: z.boolean(),
     /// Validated then re-serialized -- captionStyleJson is the actual Prisma column.
     captionStyle: captionStyleSchema,
+    /// Validated then re-serialized -- propertiesJson is the actual Prisma column.
+    properties: videoPropertiesSchema,
   })
   .partial()
   .refine((data) => Object.keys(data).length > 0, {
     message: "Provide at least one field to update.",
   })
-  .transform(({ captionStyle, ...rest }) => ({
+  .transform(({ captionStyle, properties, ...rest }) => ({
     ...rest,
     ...(captionStyle !== undefined ? { captionStyleJson: JSON.stringify(captionStyle) } : {}),
+    ...(properties !== undefined ? { propertiesJson: JSON.stringify(properties) } : {}),
   }));

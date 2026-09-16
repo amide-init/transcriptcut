@@ -36,6 +36,7 @@ export default async function EditorPage(props: PageProps<"/editor/[projectId]">
         filterId: project.filterId,
         burnInCaptions: project.burnInCaptions,
         captionStyle: project.captionStyleJson ? JSON.parse(project.captionStyleJson) : null,
+        properties: project.propertiesJson ? JSON.parse(project.propertiesJson) : null,
         videoUrl: hasVideo ? `/api/projects/${project.id}/video` : null,
       }}
       transcript={transcript}

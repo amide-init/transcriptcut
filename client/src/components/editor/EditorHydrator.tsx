@@ -9,6 +9,7 @@ import { EditorLayout } from "@/components/editor/EditorLayout";
 import type { Transcript } from "@/types/transcript";
 import type { EditOperation } from "@/types/edit-operation";
 import type { CaptionStyle } from "@/lib/captions/style";
+import type { VideoProperties } from "@/types/video-properties";
 
 type HydrateProject = {
   id: string;
@@ -16,6 +17,7 @@ type HydrateProject = {
   filterId: string;
   burnInCaptions: boolean;
   captionStyle: CaptionStyle | null;
+  properties: VideoProperties | null;
   videoUrl: string | null;
 };
 

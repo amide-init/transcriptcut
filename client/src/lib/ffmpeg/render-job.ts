@@ -8,6 +8,7 @@ import { runFfmpeg } from "@/lib/ffmpeg/run";
 import { generateCaptions } from "@/lib/captions/generate";
 import { toAssKaraoke, toSrt } from "@/lib/captions/format";
 import { DEFAULT_CAPTION_STYLE, type CaptionStyle } from "@/lib/captions/style";
+import { DEFAULT_VIDEO_PROPERTIES } from "@/types/video-properties";
 import type { CutOperation, EditOperation } from "@/types/edit-operation";
 import type { Transcript } from "@/types/transcript";
 
@@ -72,6 +73,7 @@ export async function runRenderJob(
       outputPath,
       playableRanges,
       filterId: project.filterId,
+      properties: project.propertiesJson ? JSON.parse(project.propertiesJson) : DEFAULT_VIDEO_PROPERTIES,
       srtPath: subtitlesPath,
       captionStyle: subtitlesPath && !useKaraoke ? (options.captionStyle ?? DEFAULT_CAPTION_STYLE) : undefined,
     });

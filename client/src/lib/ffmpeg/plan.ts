@@ -1,6 +1,8 @@
 import type { PlayableRange } from "@/types/timeline";
 import { getFfmpegFilter } from "@/lib/ffmpeg/filters";
+import { buildPropertiesFilter } from "@/lib/ffmpeg/properties";
 import { buildForceStyle, type CaptionStyle } from "@/lib/captions/style";
+import type { VideoProperties } from "@/types/video-properties";
 
 /**
  * Escapes a file path for use as the subtitles filter's filename option.
@@ -45,6 +47,8 @@ export function buildRenderArgs(args: {
   outputPath: string;
   playableRanges: PlayableRange[];
   filterId: string;
+  /** Manual color-adjustment sliders, layered on top of the filter preset. */
+  properties?: VideoProperties;
   /**
    * Absolute path to a subtitle file to burn in, if captions were requested.
    * Usually .srt; for word-highlight it's a self-styled .ass with karaoke
@@ -56,7 +60,7 @@ export function buildRenderArgs(args: {
   /** Caption style to burn in via force_style; ignored unless srtPath is also set. */
   captionStyle?: CaptionStyle;
 }): string[] {
-  const { inputPath, outputPath, playableRanges, filterId, srtPath, captionStyle } = args;
+  const { inputPath, outputPath, playableRanges, filterId, properties, srtPath, captionStyle } = args;
 
   if (playableRanges.length === 0) {
     throw new Error("Nothing to render -- the entire video has been cut.");
@@ -79,9 +83,11 @@ export function buildRenderArgs(args: {
   filterChains.push(`${interleaved}concat=n=${playableRanges.length}:v=1:a=1[outv][outa]`);
 
   let videoOutLabel = "[outv]";
-  const ffmpegFilter = getFfmpegFilter(filterId);
-  if (ffmpegFilter) {
-    filterChains.push(`[outv]${ffmpegFilter}[filtered]`);
+  const presetFilter = getFfmpegFilter(filterId);
+  const propertiesFilter = properties ? buildPropertiesFilter(properties) : null;
+  const colorFilter = [presetFilter, propertiesFilter].filter(Boolean).join(",");
+  if (colorFilter) {
+    filterChains.push(`[outv]${colorFilter}[filtered]`);
     videoOutLabel = "[filtered]";
   }
 
