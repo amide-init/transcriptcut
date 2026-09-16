@@ -4,6 +4,7 @@ import { useState } from "react";
 import {
   CAPTION_FONTS,
   CAPTION_POSITIONS,
+  CAPTION_THEMES,
   type CaptionPosition,
   type CaptionStyle,
 } from "@/lib/captions/style";
@@ -43,6 +44,41 @@ export function CaptionStyleControls({
           <DrawerDescription>Applied when captions are burned into the export.</DrawerDescription>
         </DrawerHeader>
         <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4 pt-0">
+          <div className="flex flex-col gap-1.5 text-xs text-muted-foreground">
+            Theme
+            <div className="grid grid-cols-2 gap-2">
+              {CAPTION_THEMES.map((theme) => {
+                const selected = JSON.stringify(theme.style) === JSON.stringify(style);
+                return (
+                  <button
+                    key={theme.id}
+                    type="button"
+                    onClick={() => onChange(theme.style)}
+                    className={`flex flex-col items-center gap-1.5 rounded-lg border p-2 transition-colors ${
+                      selected ? "border-primary bg-primary/10" : "border-border hover:bg-muted"
+                    }`}
+                  >
+                    <span className="flex h-9 w-full items-center justify-center rounded bg-neutral-800 text-[0.7rem] font-medium">
+                      <span
+                        style={{
+                          fontFamily: theme.style.font,
+                          color: theme.style.textColor,
+                          WebkitTextStroke: `0.5px ${theme.style.outlineColor}`,
+                          ...(theme.style.background
+                            ? { backgroundColor: "rgba(0,0,0,0.7)", padding: "1px 6px", borderRadius: 3 }
+                            : {}),
+                        }}
+                      >
+                        Aa
+                      </span>
+                    </span>
+                    <span className="text-foreground">{theme.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <label className="flex flex-col gap-1 text-xs text-muted-foreground">
             Font
             <select

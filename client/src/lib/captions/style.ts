@@ -42,6 +42,63 @@ export const DEFAULT_CAPTION_STYLE: CaptionStyle = {
   background: false,
 };
 
+/** One-click starting points for the manual style controls -- pick a theme, then fine-tune from there. */
+export const CAPTION_THEMES: { id: string; label: string; style: CaptionStyle }[] = [
+  {
+    id: "classic",
+    label: "Classic",
+    style: DEFAULT_CAPTION_STYLE,
+  },
+  {
+    id: "bold-yellow",
+    label: "Bold Yellow",
+    style: {
+      font: "Impact",
+      fontSize: 32,
+      textColor: "#FFEE00",
+      outlineColor: "#000000",
+      position: "bottom",
+      background: false,
+    },
+  },
+  {
+    id: "boxed",
+    label: "Boxed",
+    style: {
+      font: "Arial",
+      fontSize: 24,
+      textColor: "#FFFFFF",
+      outlineColor: "#000000",
+      position: "bottom",
+      background: true,
+    },
+  },
+  {
+    id: "minimal-top",
+    label: "Minimal Top",
+    style: {
+      font: "Verdana",
+      fontSize: 20,
+      textColor: "#FFFFFF",
+      outlineColor: "#000000",
+      position: "top",
+      background: false,
+    },
+  },
+  {
+    id: "high-contrast",
+    label: "High Contrast",
+    style: {
+      font: "Georgia",
+      fontSize: 28,
+      textColor: "#000000",
+      outlineColor: "#FFFFFF",
+      position: "bottom",
+      background: true,
+    },
+  },
+];
+
 /** ASS/libass alignment values (numpad layout, center column only). */
 const ALIGNMENT_BY_POSITION: Record<CaptionPosition, number> = {
   bottom: 2,
