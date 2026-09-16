@@ -9,14 +9,16 @@ current build status.
 
 ## Status
 
-The core transcript ↔ video editing loop works end to end: upload a video,
-it's auto-transcribed with word-level timestamps, delete text in the
-transcript and the matching section of the video is cut — reflected on the
-timeline and skipped during playback, with undo/redo. A Descript-style
-filters drawer applies visual presets to the preview.
+The full transcript ↔ video editing loop works end to end: create a
+project, upload a video, it's auto-transcribed with word-level
+timestamps, delete text in the transcript and the matching section of the
+video is cut — reflected on the timeline and skipped during playback,
+with undo/redo, a live-updating waveform, and live caption preview. A
+Descript-style filters drawer applies visual presets to the preview, and
+export renders the final MP4 (optionally with burned-in, styled captions).
 
-Local persistence (SQLite via Prisma + the local filesystem), project
-CRUD, and the separate `server/` are not yet built — see the
+Local persistence (SQLite via Prisma) and project CRUD are built and in
+use. The separate `server/` directory isn't — see the
 [issue tracker](https://github.com/amide-init/vdescript/issues) for the
 full breakdown of what's done vs. planned. Everything currently runs
 inside the `client/` Next.js app, including the API routes.
@@ -35,22 +37,18 @@ server/      — reserved for future use, not in use yet
 
 ## Running the client
 
+Requires [FFmpeg](https://ffmpeg.org/download.html) on your machine
+(used for cuts and export) and an OpenAI API key (used server-side only,
+for transcription).
+
 ```bash
 cd client
-npm install
+pnpm install
+cp .env.example .env   # then fill in OPENAI_API_KEY
+pnpm exec prisma generate
+pnpm run dev
 ```
 
-Add an OpenAI API key (used server-side only, for transcription) to
-`client/.env`:
-
-```bash
-OPENAI_API_KEY=sk-...
-```
-
-Then start the dev server:
-
-```bash
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3000](http://localhost:3000). See
+[`.env.example`](./client/.env.example) for what each variable does, and
+[`CONTRIBUTING.md`](./CONTRIBUTING.md) for more.
