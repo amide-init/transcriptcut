@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { Readable } from "node:stream";
 import { prisma } from "@/lib/db/client";
-import { readAssetStream, statAsset } from "@/lib/storage/local";
+import { readAssetStream, statAsset, streamToWebReadable } from "@/lib/storage/local";
 
 export const runtime = "nodejs";
 
@@ -24,7 +23,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
   const stats = await statAsset(job.outputPath);
   const stream = readAssetStream(job.outputPath);
 
-  return new NextResponse(Readable.toWeb(stream) as ReadableStream, {
+  return new NextResponse(streamToWebReadable(stream), {
     status: 200,
     headers: {
       "Content-Type": "video/mp4",

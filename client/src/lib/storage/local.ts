@@ -1,5 +1,5 @@
 import { mkdir, rm, stat, writeFile } from "node:fs/promises";
-import { createReadStream } from "node:fs";
+import { createReadStream, type ReadStream } from "node:fs";
 import path from "node:path";
 
 /**
@@ -89,6 +89,57 @@ export function readAssetStream(relativePath: string, range?: { start: number; e
   return range
     ? createReadStream(absolutePath, { start: range.start, end: range.end })
     : createReadStream(absolutePath);
+}
+
+/**
+ * Wraps a Node fs read stream as a Web ReadableStream for use as a
+ * NextResponse body.
+ *
+ * Not just `Readable.toWeb(stream)`: that throws an uncaught
+ * `ERR_INVALID_STATE: Invalid state: Controller is already closed` when the
+ * client aborts mid-stream (e.g. a <video> element cancelling a Range
+ * request while seeking) races with the fs stream's own 'end'/'close', and
+ * both paths try to close the same controller. Every controller call here
+ * is guarded so that race can't produce an unhandled exception, and
+ * `cancel()` explicitly destroys the underlying fd on client abort instead
+ * of leaving that to `Readable.toWeb`'s internal handling.
+ */
+export function streamToWebReadable(stream: ReadStream): ReadableStream<Uint8Array> {
+  let closed = false;
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      stream.on("data", (chunk) => {
+        if (closed) return;
+        try {
+          controller.enqueue(chunk as Uint8Array);
+        } catch {
+          // Controller already closed/errored elsewhere -- stream is being torn down.
+        }
+      });
+      stream.on("end", () => {
+        if (closed) return;
+        closed = true;
+        try {
+          controller.close();
+        } catch {
+          // Already closed via the error path below -- nothing to do.
+        }
+      });
+      stream.on("error", (err) => {
+        if (closed) return;
+        closed = true;
+        try {
+          controller.error(err);
+        } catch {
+          // Already closed via the end path above -- nothing to do.
+        }
+      });
+    },
+    cancel() {
+      closed = true;
+      stream.destroy();
+    },
+  });
 }
 
 export async function deleteProjectDir(projectId: string): Promise<void> {
