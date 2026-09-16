@@ -10,4 +10,6 @@ export const captionStyleSchema = z.object({
   outlineColor: hexColor,
   position: z.enum(CAPTION_POSITIONS),
   background: z.boolean(),
+  wordHighlight: z.boolean(),
+  highlightColor: hexColor,
 });

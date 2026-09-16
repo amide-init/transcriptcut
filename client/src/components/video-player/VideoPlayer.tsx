@@ -150,14 +150,29 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
               style={{
                 fontFamily: captionStyle.font,
                 fontSize: `${captionStyle.fontSize}px`,
-                color: captionStyle.textColor,
+                color: captionStyle.wordHighlight ? undefined : captionStyle.textColor,
                 WebkitTextStroke: `1px ${captionStyle.outlineColor}`,
                 textShadow: captionStyle.background
                   ? undefined
                   : `0 0 3px ${captionStyle.outlineColor}`,
               }}
             >
-              {activeCue.text}
+              {captionStyle.wordHighlight
+                ? activeCue.words.map((w, i) => (
+                    <span
+                      key={i}
+                      style={{
+                        color:
+                          editedCurrentTime >= w.start && editedCurrentTime < w.end
+                            ? captionStyle.highlightColor
+                            : captionStyle.textColor,
+                      }}
+                    >
+                      {w.text}
+                      {i < activeCue.words.length - 1 ? " " : ""}
+                    </span>
+                  ))
+                : activeCue.text}
             </span>
           </div>
         )}

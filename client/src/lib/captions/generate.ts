@@ -3,11 +3,20 @@ import type { CutOperation } from "@/types/edit-operation";
 import { splitIntoSentences } from "@/lib/timeline/sentences";
 import { computePlayableRanges, isWordCut, sourceTimeToEditedTime } from "@/lib/timeline/cuts";
 
+export type CaptionCueWord = {
+  /** Seconds, on the *edited* timeline (post-cuts). */
+  start: number;
+  end: number;
+  text: string;
+};
+
 export type CaptionCue = {
   /** Seconds, on the *edited* timeline (post-cuts) -- matches the rendered video, not the raw source. */
   start: number;
   end: number;
   text: string;
+  /** Per-word timing within this cue, for word-by-word highlight styles (claude.md issue #15). */
+  words: CaptionCueWord[];
 };
 
 /**
@@ -40,6 +49,11 @@ export function generateCaptions(
         start: sourceTimeToEditedTime(sourceStart, playableRanges),
         end: sourceTimeToEditedTime(sourceEnd, playableRanges),
         text: survivingWords.map((w) => w.text).join(" "),
+        words: survivingWords.map((w) => ({
+          start: sourceTimeToEditedTime(w.start, playableRanges),
+          end: sourceTimeToEditedTime(w.end, playableRanges),
+          text: w.text,
+        })),
       });
     }
   }

@@ -62,14 +62,20 @@ export function CaptionStyleControls({
                       <span
                         style={{
                           fontFamily: theme.style.font,
-                          color: theme.style.textColor,
                           WebkitTextStroke: `0.5px ${theme.style.outlineColor}`,
                           ...(theme.style.background
                             ? { backgroundColor: "rgba(0,0,0,0.7)", padding: "1px 6px", borderRadius: 3 }
                             : {}),
                         }}
                       >
-                        Aa
+                        {theme.style.wordHighlight ? (
+                          <>
+                            <span style={{ color: theme.style.highlightColor }}>A</span>
+                            <span style={{ color: theme.style.textColor }}>a</span>
+                          </>
+                        ) : (
+                          <span style={{ color: theme.style.textColor }}>Aa</span>
+                        )}
                       </span>
                     </span>
                     <span className="text-foreground">{theme.label}</span>
@@ -157,6 +163,29 @@ export function CaptionStyleControls({
             />
             Background box behind text
           </label>
+
+          <div className="flex flex-col gap-2 rounded-lg border border-border p-2.5">
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={style.wordHighlight}
+                onChange={(e) => onChange({ ...style, wordHighlight: e.target.checked })}
+                className="accent-primary"
+              />
+              Highlight each word as it is spoken (preview only)
+            </label>
+            {style.wordHighlight && (
+              <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+                Highlight color
+                <input
+                  type="color"
+                  value={style.highlightColor}
+                  onChange={(e) => onChange({ ...style, highlightColor: e.target.value })}
+                  className="h-8 w-full rounded-lg border border-input bg-transparent p-0.5"
+                />
+              </label>
+            )}
+          </div>
         </div>
       </DrawerContent>
     </Drawer>

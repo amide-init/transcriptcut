@@ -31,6 +31,16 @@ export type CaptionStyle = {
   position: CaptionPosition;
   /** Draw an opaque box behind the text instead of just an outline. */
   background: boolean;
+  /**
+   * Word-by-word "typing" highlight (claude.md issue #15): the word
+   * currently being spoken renders in highlightColor, the rest of the cue
+   * in textColor. Live-preview only for now -- the export pipeline still
+   * burns in plain per-sentence text via SRT, which has no per-word
+   * timing/color, so this has no effect on the rendered file yet.
+   */
+  wordHighlight: boolean;
+  /** '#RRGGBB' -- color of the word currently being spoken when wordHighlight is on. */
+  highlightColor: string;
 };
 
 export const DEFAULT_CAPTION_STYLE: CaptionStyle = {
@@ -40,6 +50,8 @@ export const DEFAULT_CAPTION_STYLE: CaptionStyle = {
   outlineColor: "#000000",
   position: "bottom",
   background: false,
+  wordHighlight: false,
+  highlightColor: "#FF0000",
 };
 
 /** One-click starting points for the manual style controls -- pick a theme, then fine-tune from there. */
@@ -59,6 +71,8 @@ export const CAPTION_THEMES: { id: string; label: string; style: CaptionStyle }[
       outlineColor: "#000000",
       position: "bottom",
       background: false,
+      wordHighlight: false,
+      highlightColor: "#FF0000",
     },
   },
   {
@@ -71,6 +85,8 @@ export const CAPTION_THEMES: { id: string; label: string; style: CaptionStyle }[
       outlineColor: "#000000",
       position: "bottom",
       background: true,
+      wordHighlight: false,
+      highlightColor: "#FF0000",
     },
   },
   {
@@ -83,6 +99,8 @@ export const CAPTION_THEMES: { id: string; label: string; style: CaptionStyle }[
       outlineColor: "#000000",
       position: "top",
       background: false,
+      wordHighlight: false,
+      highlightColor: "#FF0000",
     },
   },
   {
@@ -95,6 +113,22 @@ export const CAPTION_THEMES: { id: string; label: string; style: CaptionStyle }[
       outlineColor: "#FFFFFF",
       position: "bottom",
       background: true,
+      wordHighlight: false,
+      highlightColor: "#FF0000",
+    },
+  },
+  {
+    id: "word-highlight",
+    label: "Word Highlight",
+    style: {
+      font: "Arial",
+      fontSize: 24,
+      textColor: "#000000",
+      outlineColor: "#FFFFFF",
+      position: "bottom",
+      background: false,
+      wordHighlight: true,
+      highlightColor: "#FF0000",
     },
   },
 ];
