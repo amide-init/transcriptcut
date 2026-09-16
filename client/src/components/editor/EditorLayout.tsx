@@ -2,16 +2,14 @@
 
 import Link from "next/link";
 import { Home } from "lucide-react";
-import { useProjectStore } from "@/stores/project-store";
 import { VideoPlayer } from "@/components/video-player/VideoPlayer";
 import { TranscriptPanel } from "@/components/transcript/TranscriptPanel";
 import { Timeline } from "@/components/timeline/Timeline";
 import { EditorSidebar } from "@/components/editor/EditorSidebar";
 import { ExportButton } from "@/components/editor/ExportButton";
+import { ProjectNameField } from "@/components/editor/ProjectNameField";
 
 export function EditorLayout({ videoUrl }: { videoUrl: string }) {
-  const name = useProjectStore((s) => s.name);
-
   return (
     <div className="flex h-screen flex-col gap-3 p-3">
       <nav className="flex h-9 shrink-0 items-center justify-between">
@@ -23,7 +21,7 @@ export function EditorLayout({ videoUrl }: { videoUrl: string }) {
           >
             <Home className="size-4" />
           </Link>
-          <h1 className="text-[0.95rem] font-medium">{name}</h1>
+          <ProjectNameField />
         </div>
         <ExportButton />
       </nav>

@@ -11,6 +11,7 @@ type ProjectStore = {
   /** Id of the selected preview filter (see lib/video/filters.ts), "none" by default. */
   filterId: string;
 
+  /** Updates local state and persists to the backend (fire-and-forget). */
   setName: (name: string) => void;
   setVideoUrl: (url: string | null) => void;
   setStatus: (status: ProjectStatus) => void;
@@ -36,7 +37,16 @@ const initialState = {
 export const useProjectStore = create<ProjectStore>((set, get) => ({
   ...initialState,
 
-  setName: (name) => set({ name }),
+  setName: (name) => {
+    set({ name });
+    const { id } = get();
+    if (!id) return;
+    fetch(`/api/projects/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    }).catch((err) => console.error("Failed to persist project name:", err));
+  },
   setVideoUrl: (videoUrl) => set({ videoUrl }),
   setStatus: (status) => set((s) => ({ status, error: status === "error" ? s.error : null })),
   setError: (error) => set({ error, status: "error" }),
