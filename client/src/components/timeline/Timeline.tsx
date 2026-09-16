@@ -14,6 +14,7 @@ import {
 import { detectSilences, type SilenceGap } from "@/lib/timeline/silence";
 import { formatTimecode } from "@/lib/timeline/format";
 import { useWaveform } from "@/lib/timeline/useWaveform";
+import { useThumbnails } from "@/lib/timeline/useThumbnails";
 import { Button } from "@/components/ui/button";
 import { Waveform } from "@/components/timeline/Waveform";
 import type { CutOperation } from "@/types/edit-operation";
@@ -41,6 +42,7 @@ export function Timeline() {
     () => operations.filter((op): op is CutOperation => op.type === "cut"),
     [operations]
   );
+  const thumbnails = useThumbnails(videoUrl, duration, cuts);
   const playableRanges = useMemo(
     () => computePlayableRanges(duration, cuts),
     [duration, cuts]
@@ -128,9 +130,14 @@ export function Timeline() {
           <div
             key={i}
             style={{ width: `${((r.end - r.start) / editedDuration) * 100}%` }}
-            className="h-full border-r border-background bg-secondary last:border-r-0"
+            className="flex h-full overflow-hidden border-r border-background bg-secondary last:border-r-0"
             title={`${r.start.toFixed(1)}s – ${r.end.toFixed(1)}s`}
-          />
+          >
+            {thumbnails[i]?.map((src, k) => (
+              // eslint-disable-next-line @next/next/no-img-element -- locally generated data URL, not a static asset
+              <img key={k} src={src} alt="" className="h-full flex-1 object-cover" draggable={false} />
+            ))}
+          </div>
         ))}
         {silenceGaps?.map((gap, i) => {
           const left = (sourceTimeToEditedTime(gap.start, playableRanges) / editedDuration) * 100;
