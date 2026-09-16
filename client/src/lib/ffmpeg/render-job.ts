@@ -6,7 +6,7 @@ import { computePlayableRanges } from "@/lib/timeline/cuts";
 import { buildRenderArgs } from "@/lib/ffmpeg/plan";
 import { runFfmpeg } from "@/lib/ffmpeg/run";
 import { generateCaptions } from "@/lib/captions/generate";
-import { toSrt } from "@/lib/captions/format";
+import { toAssKaraoke, toSrt } from "@/lib/captions/format";
 import { DEFAULT_CAPTION_STYLE, type CaptionStyle } from "@/lib/captions/style";
 import type { CutOperation, EditOperation } from "@/types/edit-operation";
 import type { Transcript } from "@/types/transcript";
@@ -45,7 +45,12 @@ export async function runRenderJob(
     const outputPath = resolveInDataDir(outputRelativePath);
     await mkdir(path.dirname(outputPath), { recursive: true });
 
-    let srtPath: string | undefined;
+    let subtitlesPath: string | undefined;
+    // Word-highlight needs per-word timing/color, which plain SRT can't carry --
+    // burn it in as a self-styled .ass file with libass karaoke (\k) tags instead,
+    // and skip force_style entirely (the file's own [V4+ Styles] line already has
+    // the chosen font/size/colors/position/background baked in).
+    const useKaraoke = options.burnInCaptions && options.captionStyle?.wordHighlight === true;
     if (options.burnInCaptions) {
       if (!project.transcript) throw new Error("Captions were requested but this project has no transcript.");
       const transcript: Transcript = {
@@ -53,9 +58,13 @@ export async function runRenderJob(
         segments: JSON.parse(project.transcript.segmentsJson),
       };
       const cues = generateCaptions(transcript, cuts, project.duration);
-      const srtRelativePath = path.posix.join("projects", project.id, "render", `${jobId}.srt`);
-      srtPath = resolveInDataDir(srtRelativePath);
-      await writeFile(srtPath, toSrt(cues), "utf-8");
+      const subtitleExt = useKaraoke ? "ass" : "srt";
+      const subtitleRelativePath = path.posix.join("projects", project.id, "render", `${jobId}.${subtitleExt}`);
+      subtitlesPath = resolveInDataDir(subtitleRelativePath);
+      const contents = useKaraoke
+        ? toAssKaraoke(cues, options.captionStyle ?? DEFAULT_CAPTION_STYLE)
+        : toSrt(cues);
+      await writeFile(subtitlesPath, contents, "utf-8");
     }
 
     const args = buildRenderArgs({
@@ -63,8 +72,8 @@ export async function runRenderJob(
       outputPath,
       playableRanges,
       filterId: project.filterId,
-      srtPath,
-      captionStyle: srtPath ? (options.captionStyle ?? DEFAULT_CAPTION_STYLE) : undefined,
+      srtPath: subtitlesPath,
+      captionStyle: subtitlesPath && !useKaraoke ? (options.captionStyle ?? DEFAULT_CAPTION_STYLE) : undefined,
     });
     await runFfmpeg(args);
 

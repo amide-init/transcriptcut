@@ -45,9 +45,15 @@ export function buildRenderArgs(args: {
   outputPath: string;
   playableRanges: PlayableRange[];
   filterId: string;
-  /** Absolute path to an .srt file to burn in, if captions were requested. */
+  /**
+   * Absolute path to a subtitle file to burn in, if captions were requested.
+   * Usually .srt; for word-highlight it's a self-styled .ass with karaoke
+   * tags (see lib/captions/format.ts#toAssKaraoke) -- in that case pass
+   * captionStyle as undefined, since the file's own style line already has
+   * everything and force_style would fight the per-word \k color tags.
+   */
   srtPath?: string;
-  /** Caption style to burn in; ignored unless srtPath is also set. */
+  /** Caption style to burn in via force_style; ignored unless srtPath is also set. */
   captionStyle?: CaptionStyle;
 }): string[] {
   const { inputPath, outputPath, playableRanges, filterId, srtPath, captionStyle } = args;

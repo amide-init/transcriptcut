@@ -34,9 +34,9 @@ export type CaptionStyle = {
   /**
    * Word-by-word "typing" highlight (claude.md issue #15): the word
    * currently being spoken renders in highlightColor, the rest of the cue
-   * in textColor. Live-preview only for now -- the export pipeline still
-   * burns in plain per-sentence text via SRT, which has no per-word
-   * timing/color, so this has no effect on the rendered file yet.
+   * in textColor. Applied both to the live preview overlay and to the
+   * export (as an .ass file with libass karaoke tags -- see
+   * lib/captions/format.ts#toAssKaraoke).
    */
   wordHighlight: boolean;
   /** '#RRGGBB' -- color of the word currently being spoken when wordHighlight is on. */
@@ -134,14 +134,14 @@ export const CAPTION_THEMES: { id: string; label: string; style: CaptionStyle }[
 ];
 
 /** ASS/libass alignment values (numpad layout, center column only). */
-const ALIGNMENT_BY_POSITION: Record<CaptionPosition, number> = {
+export const ALIGNMENT_BY_POSITION: Record<CaptionPosition, number> = {
   bottom: 2,
   middle: 5,
   top: 8,
 };
 
 /** '#RRGGBB' -> ASS '&HAABBGGRR' (opaque, so alpha is always 00). */
-function hexToAssColor(hex: string): string {
+export function hexToAssColor(hex: string): string {
   const r = hex.slice(1, 3);
   const g = hex.slice(3, 5);
   const b = hex.slice(5, 7);

@@ -171,7 +171,7 @@ export function CaptionsPanel() {
             onChange={(e) => onChange({ ...style, wordHighlight: e.target.checked })}
             className="accent-primary"
           />
-          Highlight each word as it is spoken (preview only)
+          Highlight each word as it is spoken
         </label>
         {style.wordHighlight && (
           <label className="flex flex-col gap-1">
