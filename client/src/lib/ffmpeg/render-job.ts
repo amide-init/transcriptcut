@@ -7,6 +7,7 @@ import { buildRenderArgs } from "@/lib/ffmpeg/plan";
 import { runFfmpeg } from "@/lib/ffmpeg/run";
 import { generateCaptions } from "@/lib/captions/generate";
 import { toSrt } from "@/lib/captions/format";
+import { DEFAULT_CAPTION_STYLE, type CaptionStyle } from "@/lib/captions/style";
 import type { CutOperation, EditOperation } from "@/types/edit-operation";
 import type { Transcript } from "@/types/transcript";
 
@@ -16,7 +17,10 @@ import type { Transcript } from "@/types/transcript";
  * from the render API route -- never awaited by the request handler, per
  * spec section 14: never block the API request on FFmpeg.
  */
-export async function runRenderJob(jobId: string, options: { burnInCaptions?: boolean } = {}): Promise<void> {
+export async function runRenderJob(
+  jobId: string,
+  options: { burnInCaptions?: boolean; captionStyle?: CaptionStyle } = {}
+): Promise<void> {
   try {
     await prisma.renderJob.update({ where: { id: jobId }, data: { status: "processing" } });
 
@@ -60,6 +64,7 @@ export async function runRenderJob(jobId: string, options: { burnInCaptions?: bo
       playableRanges,
       filterId: project.filterId,
       srtPath,
+      captionStyle: srtPath ? (options.captionStyle ?? DEFAULT_CAPTION_STYLE) : undefined,
     });
     await runFfmpeg(args);
 

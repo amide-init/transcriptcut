@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db/client";
 import { runRenderJob } from "@/lib/ffmpeg/render-job";
+import { captionStyleSchema } from "@/lib/validation/caption-style";
+import type { CaptionStyle } from "@/lib/captions/style";
 
 export const runtime = "nodejs";
 
@@ -14,9 +16,17 @@ export async function POST(request: Request, { params }: RouteContext) {
   const { id } = await params;
 
   let burnInCaptions = false;
+  let captionStyle: CaptionStyle | undefined;
   try {
     const body = await request.json();
     burnInCaptions = body?.burnInCaptions === true;
+    if (burnInCaptions && body?.captionStyle !== undefined) {
+      const parsed = captionStyleSchema.safeParse(body.captionStyle);
+      if (!parsed.success) {
+        return errorResponse("INVALID_CAPTION_STYLE", "Invalid caption style.", 400);
+      }
+      captionStyle = parsed.data;
+    }
   } catch {
     // No body (or invalid JSON) just means "no captions" -- not an error.
   }
@@ -37,7 +47,7 @@ export async function POST(request: Request, { params }: RouteContext) {
   });
 
   // Fire-and-forget: never block the request on FFmpeg (spec section 14).
-  void runRenderJob(job.id, { burnInCaptions });
+  void runRenderJob(job.id, { burnInCaptions, captionStyle });
 
   return NextResponse.json({ success: true, jobId: job.id }, { status: 202 });
 }

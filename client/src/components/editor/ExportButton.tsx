@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useProjectStore } from "@/stores/project-store";
 import { Button } from "@/components/ui/button";
+import { CaptionStyleControls } from "@/components/editor/CaptionStyleControls";
+import { DEFAULT_CAPTION_STYLE, type CaptionStyle } from "@/lib/captions/style";
 
 type JobStatus = "queued" | "processing" | "completed" | "failed";
 type JobResponse =
@@ -17,6 +19,7 @@ export function ExportButton() {
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [burnInCaptions, setBurnInCaptions] = useState(false);
+  const [captionStyle, setCaptionStyle] = useState<CaptionStyle>(DEFAULT_CAPTION_STYLE);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -61,7 +64,10 @@ export function ExportButton() {
       const res = await fetch(`/api/projects/${projectId}/render`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ burnInCaptions }),
+        body: JSON.stringify({
+          burnInCaptions,
+          captionStyle: burnInCaptions ? captionStyle : undefined,
+        }),
       });
       const data: { success: true; jobId: string } | { success: false; error: { message: string } } =
         await res.json();
@@ -101,6 +107,7 @@ export function ExportButton() {
         />
         Burn in captions
       </label>
+      <CaptionStyleControls style={captionStyle} onChange={setCaptionStyle} disabled={busy || !burnInCaptions} />
       {error && <span className="text-xs text-destructive">{error}</span>}
       {status === "completed" && downloadUrl ? (
         <>

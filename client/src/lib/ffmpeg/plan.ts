@@ -1,5 +1,6 @@
 import type { PlayableRange } from "@/types/timeline";
 import { getFfmpegFilter } from "@/lib/ffmpeg/filters";
+import { buildForceStyle, type CaptionStyle } from "@/lib/captions/style";
 
 /**
  * Escapes a file path for use as the subtitles filter's filename option.
@@ -12,6 +13,18 @@ import { getFfmpegFilter } from "@/lib/ffmpeg/filters";
  */
 function escapeSubtitlesPath(p: string): string {
   return p.replace(/\\/g, "/").replace(/:/g, "\\:");
+}
+
+/**
+ * Escapes a filtergraph option value (e.g. force_style). Values here are
+ * always built from lib/captions/style.ts#buildForceStyle -- a whitelisted
+ * font, clamped numeric size, and algorithmically-derived hex colors -- so
+ * none of this should ever fire in practice. It's still here per spec
+ * section 18: sanitize and validate all FFmpeg parameters, defense in depth
+ * rather than trusting the caller.
+ */
+function escapeFilterOptionValue(v: string): string {
+  return v.replace(/\\/g, "\\\\").replace(/:/g, "\\:").replace(/'/g, "\\'");
 }
 
 /**
@@ -34,8 +47,10 @@ export function buildRenderArgs(args: {
   filterId: string;
   /** Absolute path to an .srt file to burn in, if captions were requested. */
   srtPath?: string;
+  /** Caption style to burn in; ignored unless srtPath is also set. */
+  captionStyle?: CaptionStyle;
 }): string[] {
-  const { inputPath, outputPath, playableRanges, filterId, srtPath } = args;
+  const { inputPath, outputPath, playableRanges, filterId, srtPath, captionStyle } = args;
 
   if (playableRanges.length === 0) {
     throw new Error("Nothing to render -- the entire video has been cut.");
@@ -65,8 +80,14 @@ export function buildRenderArgs(args: {
   }
 
   if (srtPath) {
+    // filename= must be explicit -- a bare positional quoted value here
+    // (`subtitles='path'`) fails to parse on newer ffmpeg builds as soon as
+    // a second, colon-separated option (force_style) follows it.
+    const styleOption = captionStyle
+      ? `:force_style='${escapeFilterOptionValue(buildForceStyle(captionStyle))}'`
+      : "";
     filterChains.push(
-      `${videoOutLabel}subtitles='${escapeSubtitlesPath(srtPath)}'[captioned]`
+      `${videoOutLabel}subtitles=filename='${escapeSubtitlesPath(srtPath)}'${styleOption}[captioned]`
     );
     videoOutLabel = "[captioned]";
   }
