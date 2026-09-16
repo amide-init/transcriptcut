@@ -14,26 +14,33 @@ export function useWaveform(videoUrl: string | null): AudioBuffer | null {
   useEffect(() => {
     if (!videoUrl) return;
 
-    let cancelled = false;
+    // Abort (not just ignore) on unmount/videoUrl change -- this is a
+    // whole-file fetch, and React invoking effects twice in dev (StrictMode)
+    // would otherwise leave the first fetch running server-side to
+    // completion for no reason, doubling load on a video route that's
+    // already juggling concurrent Range requests from the <video> element.
+    const controller = new AbortController();
     const AudioContextCtor =
       window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     const ctx = new AudioContextCtor();
 
     (async () => {
       try {
-        const res = await fetch(videoUrl);
+        const res = await fetch(videoUrl, { signal: controller.signal });
         const arrayBuffer = await res.arrayBuffer();
         const decoded = await ctx.decodeAudioData(arrayBuffer);
-        if (!cancelled) setBuffer(decoded);
+        // decodeAudioData itself isn't abortable -- if videoUrl changed
+        // while it was running, skip applying this now-stale result.
+        if (!controller.signal.aborted) setBuffer(decoded);
       } catch {
-        // No audio track, unsupported codec, or decode failure — just skip the waveform.
+        // Aborted, no audio track, unsupported codec, or decode failure — just skip the waveform.
       } finally {
         ctx.close();
       }
     })();
 
     return () => {
-      cancelled = true;
+      controller.abort();
     };
   }, [videoUrl]);
 
