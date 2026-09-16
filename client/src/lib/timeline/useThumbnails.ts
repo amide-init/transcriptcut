@@ -6,8 +6,10 @@ import { computePlayableRanges } from "@/lib/timeline/cuts";
 
 const THUMB_WIDTH = 96;
 const THUMB_HEIGHT = 54;
-/** Fallback thumbnail budget for callers that don't scale it with zoom (see Timeline.tsx). */
-const DEFAULT_TOTAL_THUMBNAILS = 24;
+/** One thumbnail roughly every this many seconds of footage. */
+const DEFAULT_INTERVAL_SECONDS = 2;
+/** Safety cap per range so a pathologically long, uncut video can't queue up an unbounded number of sequential seeks. */
+const MAX_THUMBNAILS_PER_RANGE = 200;
 
 export type RangeThumbnails = Record<number, string[]>;
 
@@ -18,9 +20,9 @@ export type RangeThumbnails = Record<number, string[]>;
  * are source-video time (playableRanges are already in source time, per
  * lib/timeline/cuts.ts), so cut-out sections are skipped automatically.
  *
- * `totalThumbnails` is roughly how many thumbnails to spread across the
- * whole edited timeline -- callers scale it with zoom level (issue #17) so
- * zooming in reveals denser thumbnails instead of stretching the same set.
+ * `intervalSeconds` is the spacing between thumbnails (default: one every
+ * 2 seconds of footage), not a total count -- longer videos/ranges get
+ * proportionally more thumbnails.
  *
  * Returns a map of playable-range index -> ordered data URLs, filled in
  * progressively as frames are grabbed (sequential seeks, not parallel --
@@ -30,7 +32,7 @@ export function useThumbnails(
   videoUrl: string | null,
   duration: number,
   cuts: CutOperation[],
-  totalThumbnails: number = DEFAULT_TOTAL_THUMBNAILS
+  intervalSeconds: number = DEFAULT_INTERVAL_SECONDS
 ): RangeThumbnails {
   const [thumbnails, setThumbnails] = useState<RangeThumbnails>({});
 
@@ -80,7 +82,7 @@ export function useThumbnails(
       for (let i = 0; i < playableRanges.length; i++) {
         const r = playableRanges[i];
         const span = r.end - r.start;
-        const count = Math.max(1, Math.round((span / editedDuration) * totalThumbnails));
+        const count = Math.max(1, Math.min(MAX_THUMBNAILS_PER_RANGE, Math.round(span / intervalSeconds)));
 
         for (let k = 0; k < count; k++) {
           if (cancelled) return;
@@ -98,7 +100,7 @@ export function useThumbnails(
       cancelled = true;
       video.src = "";
     };
-  }, [videoUrl, duration, cuts, totalThumbnails]);
+  }, [videoUrl, duration, cuts, intervalSeconds]);
 
   return thumbnails;
 }

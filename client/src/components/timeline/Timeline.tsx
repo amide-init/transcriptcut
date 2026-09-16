@@ -23,8 +23,6 @@ import type { CutOperation } from "@/types/edit-operation";
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 8;
 const ZOOM_STEP = 1.5;
-/** Roughly one thumbnail per this many track pixels -- denser at higher zoom (issue #17). */
-const PX_PER_THUMBNAIL = 90;
 
 export function Timeline() {
   const trackRef = useRef<HTMLDivElement>(null);
@@ -72,9 +70,8 @@ export function Timeline() {
   const pxPerSecond = fitPxPerSecond !== null ? fitPxPerSecond * zoom : 0;
   const trackWidth = pxPerSecond > 0 ? editedDuration * pxPerSecond : 0;
 
-  const totalThumbnails =
-    trackWidth > 0 ? Math.max(8, Math.min(160, Math.round(trackWidth / PX_PER_THUMBNAIL))) : undefined;
-  const thumbnails = useThumbnails(videoUrl, duration, cuts, totalThumbnails);
+  // One thumbnail every ~2s of footage (useThumbnails' default).
+  const thumbnails = useThumbnails(videoUrl, duration, cuts);
 
   // Keep the playhead in view as it moves during playback, and when zoom changes.
   useEffect(() => {
