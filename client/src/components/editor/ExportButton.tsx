@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import { useProjectStore } from "@/stores/project-store";
 import { useCaptionStyleStore } from "@/stores/caption-style-store";
 import { Button } from "@/components/ui/button";
-import { CaptionStyleControls } from "@/components/editor/CaptionStyleControls";
 
 type JobStatus = "queued" | "processing" | "completed" | "failed";
 type JobResponse =
@@ -19,9 +18,7 @@ export function ExportButton() {
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const burnInCaptions = useCaptionStyleStore((s) => s.burnInCaptions);
-  const setBurnInCaptions = useCaptionStyleStore((s) => s.setBurnInCaptions);
   const captionStyle = useCaptionStyleStore((s) => s.style);
-  const setCaptionStyle = useCaptionStyleStore((s) => s.setStyle);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -89,27 +86,6 @@ export function ExportButton() {
 
   return (
     <div className="flex items-center gap-3">
-      {projectId && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <a href={`/api/projects/${projectId}/captions?format=srt`} download className="hover:text-foreground">
-            SRT
-          </a>
-          <a href={`/api/projects/${projectId}/captions?format=vtt`} download className="hover:text-foreground">
-            VTT
-          </a>
-        </div>
-      )}
-      <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <input
-          type="checkbox"
-          checked={burnInCaptions}
-          onChange={(e) => setBurnInCaptions(e.target.checked)}
-          disabled={busy}
-          className="accent-primary"
-        />
-        Burn in captions
-      </label>
-      <CaptionStyleControls style={captionStyle} onChange={setCaptionStyle} disabled={busy || !burnInCaptions} />
       {error && <span className="text-xs text-destructive">{error}</span>}
       {status === "completed" && downloadUrl ? (
         <>

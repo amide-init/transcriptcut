@@ -15,7 +15,7 @@ type CaptionStyleStore = {
 };
 
 /**
- * Shared between the export controls (ExportButton/CaptionStyleControls) and
+ * Shared between the sidebar's CaptionsPanel and
  * the live preview overlay (VideoPlayer), so picking a style -- or toggling
  * captions on/off -- shows up in the preview immediately instead of only
  * being visible after exporting. Persisted per-project (like filterId in

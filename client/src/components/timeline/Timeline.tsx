@@ -11,7 +11,6 @@ import {
   getEditedDuration,
   sourceTimeToEditedTime,
 } from "@/lib/timeline/cuts";
-import { detectSilences, type SilenceGap } from "@/lib/timeline/silence";
 import { formatTimecode } from "@/lib/timeline/format";
 import { useWaveform } from "@/lib/timeline/useWaveform";
 import { useThumbnails } from "@/lib/timeline/useThumbnails";
@@ -27,7 +26,6 @@ const ZOOM_STEP = 1.5;
 export function Timeline() {
   const trackRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const [silenceGaps, setSilenceGaps] = useState<SilenceGap[] | null>(null);
   const [fitPxPerSecond, setFitPxPerSecond] = useState<number | null>(null);
   const [zoom, setZoom] = useState(MIN_ZOOM);
 
@@ -35,13 +33,12 @@ export function Timeline() {
   const currentTime = usePlayerStore((s) => s.currentTime);
   const seek = usePlayerStore((s) => s.seek);
 
-  const transcript = useTranscriptStore((s) => s.transcript);
+  const silenceGaps = useTranscriptStore((s) => s.silenceGaps);
 
   const videoUrl = useProjectStore((s) => s.videoUrl);
   const audioBuffer = useWaveform(videoUrl);
 
   const operations = useTimelineStore((s) => s.operations);
-  const addCut = useTimelineStore((s) => s.addCut);
   const undo = useTimelineStore((s) => s.undo);
   const redo = useTimelineStore((s) => s.redo);
   const redoStack = useTimelineStore((s) => s.redoStack);
@@ -96,19 +93,6 @@ export function Timeline() {
     seek(sourceTime);
   };
 
-  const handleFindSilences = () => {
-    if (!transcript) return;
-    setSilenceGaps(detectSilences(transcript));
-  };
-
-  const handleRemoveSilences = () => {
-    if (!silenceGaps) return;
-    for (const gap of silenceGaps) {
-      addCut(gap.start, gap.end, "long pause");
-    }
-    setSilenceGaps(null);
-  };
-
   return (
     <div className="flex flex-col gap-2">
       <div className="flex h-7 items-center justify-between">
@@ -125,25 +109,6 @@ export function Timeline() {
           </span>
         </div>
         <div className="flex gap-1.5">
-          {silenceGaps && silenceGaps.length > 0 ? (
-            <>
-              <Button variant="ghost" size="xs" onClick={() => setSilenceGaps(null)}>
-                Dismiss
-              </Button>
-              <Button variant="destructive" size="xs" onClick={handleRemoveSilences}>
-                Remove {silenceGaps.length === 1 ? "1 pause" : `${silenceGaps.length} pauses`}
-              </Button>
-            </>
-          ) : (
-            <Button
-              variant="outline"
-              size="xs"
-              onClick={handleFindSilences}
-              disabled={!transcript}
-            >
-              {silenceGaps ? "No long pauses found" : "Find long pauses"}
-            </Button>
-          )}
           <Button
             variant="outline"
             size="xs"
