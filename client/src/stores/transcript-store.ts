@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { Transcript } from "@/types/transcript";
+import type { SilenceGap } from "@/lib/timeline/silence";
 
 type TranscriptStore = {
   transcript: Transcript | null;
@@ -8,6 +9,8 @@ type TranscriptStore = {
   /** ids of words flagged as filler by the last detection pass */
   fillerWordIds: string[];
   detectingFillerWords: boolean;
+  /** Gaps flagged by the last "Find long pauses" pass (AiToolsPanel), null = not run yet. */
+  silenceGaps: SilenceGap[] | null;
 
   setTranscript: (transcript: Transcript | null) => void;
   toggleWordSelection: (wordId: string) => void;
@@ -15,6 +18,7 @@ type TranscriptStore = {
   clearSelection: () => void;
   setFillerWordIds: (ids: string[]) => void;
   setDetectingFillerWords: (detecting: boolean) => void;
+  setSilenceGaps: (gaps: SilenceGap[] | null) => void;
   /** Local-only update; persisting to the backend is the caller's job (see TranscriptPanel). */
   setSegmentSpeaker: (segmentId: string, speaker: string | null) => void;
 };
@@ -24,8 +28,10 @@ export const useTranscriptStore = create<TranscriptStore>((set, get) => ({
   selectedWordIds: [],
   fillerWordIds: [],
   detectingFillerWords: false,
+  silenceGaps: null,
 
-  setTranscript: (transcript) => set({ transcript, selectedWordIds: [], fillerWordIds: [] }),
+  setTranscript: (transcript) =>
+    set({ transcript, selectedWordIds: [], fillerWordIds: [], silenceGaps: null }),
 
   toggleWordSelection: (wordId) =>
     set((s) => ({
@@ -49,6 +55,7 @@ export const useTranscriptStore = create<TranscriptStore>((set, get) => ({
 
   setFillerWordIds: (fillerWordIds) => set({ fillerWordIds }),
   setDetectingFillerWords: (detectingFillerWords) => set({ detectingFillerWords }),
+  setSilenceGaps: (silenceGaps) => set({ silenceGaps }),
 
   setSegmentSpeaker: (segmentId, speaker) =>
     set((s) => {
