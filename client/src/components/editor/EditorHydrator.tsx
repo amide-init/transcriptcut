@@ -4,11 +4,20 @@ import { useEffect } from "react";
 import { useProjectStore } from "@/stores/project-store";
 import { useTranscriptStore } from "@/stores/transcript-store";
 import { useTimelineStore } from "@/stores/timeline-store";
+import { useCaptionStyleStore } from "@/stores/caption-style-store";
 import { EditorLayout } from "@/components/editor/EditorLayout";
 import type { Transcript } from "@/types/transcript";
 import type { EditOperation } from "@/types/edit-operation";
+import type { CaptionStyle } from "@/lib/captions/style";
 
-type HydrateProject = { id: string; name: string; filterId: string; videoUrl: string | null };
+type HydrateProject = {
+  id: string;
+  name: string;
+  filterId: string;
+  burnInCaptions: boolean;
+  captionStyle: CaptionStyle | null;
+  videoUrl: string | null;
+};
 
 /** Loads a project fetched server-side into the client stores, then renders the editor. */
 export function EditorHydrator({
@@ -23,11 +32,13 @@ export function EditorHydrator({
   const hydrateProject = useProjectStore((s) => s.hydrate);
   const setTranscript = useTranscriptStore((s) => s.setTranscript);
   const hydrateTimeline = useTimelineStore((s) => s.hydrate);
+  const hydrateCaptionStyle = useCaptionStyleStore((s) => s.hydrate);
 
   useEffect(() => {
     hydrateProject(project);
     setTranscript(transcript);
     hydrateTimeline(project.id, operations);
+    hydrateCaptionStyle(project.id, project.burnInCaptions, project.captionStyle);
     // Only re-hydrate when navigating to a different project.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.id]);
