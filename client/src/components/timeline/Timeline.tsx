@@ -141,7 +141,7 @@ export function Timeline() {
           <div
             ref={trackRef}
             onClick={handleTrackClick}
-            className="relative flex h-11 w-full cursor-pointer overflow-hidden rounded-md bg-muted"
+            className="relative flex h-24 w-full cursor-pointer overflow-hidden rounded-md bg-muted"
           >
             {playableRanges.map((r, i) => (
               <div
@@ -174,7 +174,7 @@ export function Timeline() {
             />
           </div>
           {audioBuffer && editedDuration > 0 && (
-            <div className="flex h-8 w-full overflow-hidden rounded-md bg-muted">
+            <div className="flex h-12 w-full overflow-hidden rounded-md bg-muted">
               {playableRanges.map((r, i) => (
                 <div
                   key={i}

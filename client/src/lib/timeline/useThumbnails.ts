@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import type { CutOperation } from "@/types/edit-operation";
 import { computePlayableRanges } from "@/lib/timeline/cuts";
 
-const THUMB_WIDTH = 96;
-const THUMB_HEIGHT = 54;
+const THUMB_WIDTH = 160;
+const THUMB_HEIGHT = 90;
 /** One thumbnail roughly every this many seconds of footage. */
 const DEFAULT_INTERVAL_SECONDS = 2;
 /** Safety cap per range so a pathologically long, uncut video can't queue up an unbounded number of sequential seeks. */
