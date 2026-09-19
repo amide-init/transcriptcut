@@ -40,7 +40,7 @@ export function PropertiesPanel() {
                   onChange={(e) =>
                     setProperties({ ...properties, [field.key]: Number(e.target.value) })
                   }
-                  className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-muted accent-primary"
+                  className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-white/20 accent-primary"
                 />
               </label>
             );
