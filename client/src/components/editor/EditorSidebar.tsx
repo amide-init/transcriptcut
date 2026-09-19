@@ -2,18 +2,20 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Captions, FolderKanban, SlidersHorizontal, Sliders, Wand2 } from "lucide-react";
+import { Captions, FolderKanban, ImagePlus, SlidersHorizontal, Sliders, Wand2 } from "lucide-react";
 import { AiToolsPanel } from "@/components/editor/AiToolsPanel";
 import { FiltersPanel } from "@/components/editor/FiltersPanel";
 import { PropertiesPanel } from "@/components/editor/PropertiesPanel";
+import { ElementsPanel } from "@/components/editor/ElementsPanel";
 import { CaptionsPanel } from "@/components/editor/CaptionsPanel";
 
-type PanelId = "ai" | "filters" | "properties" | "captions";
+type PanelId = "ai" | "filters" | "properties" | "elements" | "captions";
 
 const RAIL_ITEMS: { id: PanelId; label: string; icon: typeof Wand2 }[] = [
   { id: "ai", label: "AI tools", icon: Wand2 },
   { id: "filters", label: "Filters", icon: SlidersHorizontal },
   { id: "properties", label: "Properties", icon: Sliders },
+  { id: "elements", label: "Elements", icon: ImagePlus },
   { id: "captions", label: "Captions", icon: Captions },
 ];
 
@@ -36,6 +38,7 @@ export function EditorSidebar() {
             {activePanel === "ai" && <AiToolsPanel />}
             {activePanel === "filters" && <FiltersPanel />}
             {activePanel === "properties" && <PropertiesPanel />}
+            {activePanel === "elements" && <ElementsPanel />}
             {activePanel === "captions" && <CaptionsPanel />}
           </div>
         </div>
