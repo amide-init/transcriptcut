@@ -31,11 +31,19 @@ export function buildPropertiesFilter(props: VideoProperties): string | null {
     parts.push(`exposure=exposure=${exposure.toFixed(3)}:black=${black.toFixed(3)}`);
   }
 
-  if (props.highlights !== 0) {
-    // Lowering the input white point below 1 brightens/expands highlights;
-    // raising it compresses them -- so a positive slider needs a smaller imax.
-    const imax = clamp(1 - props.highlights / 250, 0.4, 1.6);
+  if (props.highlights > 0) {
+    // Lowering the input white point below 1 pushes more of the image
+    // toward white, brightening/expanding highlights.
+    const imax = clamp(1 - props.highlights / 250, 0.4, 1);
     parts.push(`colorlevels=rimax=${imax.toFixed(3)}:gimax=${imax.toFixed(3)}:bimax=${imax.toFixed(3)}`);
+  } else if (props.highlights < 0) {
+    // colorlevels' imax can't go above 1 -- ffmpeg rejects it ("out of
+    // range [-1 - 1]") -- so compressing highlights can't be done by
+    // raising the input white point. Lowering the *output* white point
+    // instead caps how bright any pixel can end up, which compresses
+    // highlights the same way, and stays valid for the whole slider range.
+    const omax = clamp(1 + props.highlights / 250, 0.4, 1);
+    parts.push(`colorlevels=romax=${omax.toFixed(3)}:gomax=${omax.toFixed(3)}:bomax=${omax.toFixed(3)}`);
   }
 
   if (props.temperature !== 0) {
