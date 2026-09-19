@@ -2,7 +2,12 @@ import type { PlayableRange } from "@/types/timeline";
 import { getFfmpegFilter } from "@/lib/ffmpeg/filters";
 import { buildPropertiesFilter } from "@/lib/ffmpeg/properties";
 import { buildForceStyle, type CaptionStyle } from "@/lib/captions/style";
+import { logoPositionToOverlayXY, type LogoPosition } from "@/lib/video/logo";
 import type { VideoProperties } from "@/types/video-properties";
+
+function clampPadding(v: number): number {
+  return Math.min(200, Math.max(0, Math.round(v)));
+}
 
 /**
  * Escapes a file path for use as the subtitles filter's filename option.
@@ -59,8 +64,25 @@ export function buildRenderArgs(args: {
   srtPath?: string;
   /** Caption style to burn in via force_style; ignored unless srtPath is also set. */
   captionStyle?: CaptionStyle;
+  /** Absolute path to a logo/watermark image to overlay, if one is set. */
+  logoPath?: string;
+  logoPosition?: LogoPosition;
+  logoPaddingX?: number;
+  logoPaddingY?: number;
 }): string[] {
-  const { inputPath, outputPath, playableRanges, filterId, properties, srtPath, captionStyle } = args;
+  const {
+    inputPath,
+    outputPath,
+    playableRanges,
+    filterId,
+    properties,
+    srtPath,
+    captionStyle,
+    logoPath,
+    logoPosition,
+    logoPaddingX,
+    logoPaddingY,
+  } = args;
 
   if (playableRanges.length === 0) {
     throw new Error("Nothing to render -- the entire video has been cut.");
@@ -104,10 +126,23 @@ export function buildRenderArgs(args: {
     videoOutLabel = "[captioned]";
   }
 
+  // Overlaid last (on top of color grading and captions) -- a watermark
+  // should stay visible even if a caption happens to sit in the same corner.
+  if (logoPath && logoPosition) {
+    const { x, y } = logoPositionToOverlayXY(
+      logoPosition,
+      clampPadding(logoPaddingX ?? 0),
+      clampPadding(logoPaddingY ?? 0)
+    );
+    filterChains.push(`${videoOutLabel}[1:v]overlay=x=${x}:y=${y}[logoed]`);
+    videoOutLabel = "[logoed]";
+  }
+
   return [
     "-y",
     "-i",
     inputPath,
+    ...(logoPath && logoPosition ? ["-i", logoPath] : []),
     "-filter_complex",
     filterChains.join(";"),
     "-map",

@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { DEFAULT_VIDEO_PROPERTIES, type VideoProperties } from "@/types/video-properties";
+import { DEFAULT_LOGO_PADDING, DEFAULT_LOGO_POSITION, type LogoPosition } from "@/lib/video/logo";
 
 export type ProjectStatus = "empty" | "creating" | "uploading" | "transcribing" | "ready" | "error";
 
@@ -13,6 +14,11 @@ type ProjectStore = {
   filterId: string;
   /** Manual color-adjustment sliders, layered on top of the filter preset. */
   properties: VideoProperties;
+  /** Uploaded logo/watermark image, or null if none is set (see lib/video/logo.ts). */
+  logoUrl: string | null;
+  logoPosition: LogoPosition;
+  logoPaddingX: number;
+  logoPaddingY: number;
 
   /** Updates local state and persists to the backend (fire-and-forget). */
   setName: (name: string) => void;
@@ -23,6 +29,12 @@ type ProjectStore = {
   setFilterId: (id: string) => void;
   /** Updates local state immediately; persists debounced (sliders fire on every drag tick). */
   setProperties: (properties: VideoProperties) => void;
+  /** Sets the logo image URL after upload/removal (fire-and-forget upload already happened). */
+  setLogoUrl: (url: string | null) => void;
+  /** Updates local state and persists to the backend (fire-and-forget). */
+  setLogoPosition: (position: LogoPosition) => void;
+  /** Updates local state immediately; persists debounced (sliders fire on every drag tick). */
+  setLogoPadding: (paddingX: number, paddingY: number) => void;
   /** Persist the video duration once known client-side (fire-and-forget). */
   setDuration: (seconds: number) => void;
   /** Load a persisted project into the store (editor page on mount). */
@@ -31,7 +43,11 @@ type ProjectStore = {
     name: string;
     filterId: string;
     properties: VideoProperties | null;
+    logoPosition: LogoPosition;
+    logoPaddingX: number;
+    logoPaddingY: number;
     videoUrl: string | null;
+    logoUrl: string | null;
   }) => void;
   reset: () => void;
 };
@@ -44,10 +60,17 @@ const initialState = {
   error: null as string | null,
   filterId: "none",
   properties: DEFAULT_VIDEO_PROPERTIES,
+  logoUrl: null as string | null,
+  logoPosition: DEFAULT_LOGO_POSITION,
+  logoPaddingX: DEFAULT_LOGO_PADDING,
+  logoPaddingY: DEFAULT_LOGO_PADDING,
 };
 
 let propertiesDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 const PROPERTIES_DEBOUNCE_MS = 400;
+
+let logoPaddingDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+const LOGO_PADDING_DEBOUNCE_MS = 400;
 
 export const useProjectStore = create<ProjectStore>((set, get) => ({
   ...initialState,
@@ -91,6 +114,33 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     }, PROPERTIES_DEBOUNCE_MS);
   },
 
+  setLogoUrl: (logoUrl) => set({ logoUrl }),
+
+  setLogoPosition: (logoPosition) => {
+    set({ logoPosition });
+    const { id } = get();
+    if (!id) return;
+    fetch(`/api/projects/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ logoPosition }),
+    }).catch((err) => console.error("Failed to persist logo position:", err));
+  },
+
+  setLogoPadding: (logoPaddingX, logoPaddingY) => {
+    set({ logoPaddingX, logoPaddingY });
+    const { id } = get();
+    if (!id) return;
+    if (logoPaddingDebounceTimer) clearTimeout(logoPaddingDebounceTimer);
+    logoPaddingDebounceTimer = setTimeout(() => {
+      fetch(`/api/projects/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ logoPaddingX, logoPaddingY }),
+      }).catch((err) => console.error("Failed to persist logo padding:", err));
+    }, LOGO_PADDING_DEBOUNCE_MS);
+  },
+
   setDuration: (duration) => {
     const { id } = get();
     if (!id) return;
@@ -107,7 +157,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       name: project.name,
       filterId: project.filterId,
       properties: project.properties ?? DEFAULT_VIDEO_PROPERTIES,
+      logoPosition: project.logoPosition,
+      logoPaddingX: project.logoPaddingX,
+      logoPaddingY: project.logoPaddingY,
       videoUrl: project.videoUrl,
+      logoUrl: project.logoUrl,
       status: "ready",
       error: null,
     }),

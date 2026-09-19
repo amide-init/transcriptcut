@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db/client";
 import { EditorHydrator } from "@/components/editor/EditorHydrator";
+import { toLogoPosition } from "@/lib/video/logo";
 import type { Transcript } from "@/types/transcript";
 import type { EditOperation } from "@/types/edit-operation";
 
@@ -27,6 +28,7 @@ export default async function EditorPage(props: PageProps<"/editor/[projectId]">
   );
 
   const hasVideo = project.assets.some((a) => a.kind === "original");
+  const hasLogo = project.assets.some((a) => a.kind === "logo");
 
   return (
     <EditorHydrator
@@ -37,7 +39,11 @@ export default async function EditorPage(props: PageProps<"/editor/[projectId]">
         burnInCaptions: project.burnInCaptions,
         captionStyle: project.captionStyleJson ? JSON.parse(project.captionStyleJson) : null,
         properties: project.propertiesJson ? JSON.parse(project.propertiesJson) : null,
+        logoPosition: toLogoPosition(project.logoPosition),
+        logoPaddingX: project.logoPaddingX,
+        logoPaddingY: project.logoPaddingY,
         videoUrl: hasVideo ? `/api/projects/${project.id}/video` : null,
+        logoUrl: hasLogo ? `/api/projects/${project.id}/logo` : null,
       }}
       transcript={transcript}
       operations={operations}

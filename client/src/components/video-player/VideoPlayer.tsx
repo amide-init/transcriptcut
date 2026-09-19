@@ -20,6 +20,7 @@ import { generateCaptions } from "@/lib/captions/generate";
 import { formatTimecode } from "@/lib/timeline/format";
 import { getFilterPreset } from "@/lib/video/filters";
 import { buildPropertiesCss } from "@/lib/video/properties";
+import { logoPositionToCss } from "@/lib/video/logo";
 import type { CutOperation } from "@/types/edit-operation";
 
 /** Approximates libass's numpad-alignment vertical placement (see lib/captions/style.ts). */
@@ -49,6 +50,11 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
   const filterCss = [getFilterPreset(filterId).css, buildPropertiesCss(properties)]
     .filter((v) => v && v !== "none")
     .join(" ");
+
+  const logoUrl = useProjectStore((s) => s.logoUrl);
+  const logoPosition = useProjectStore((s) => s.logoPosition);
+  const logoPaddingX = useProjectStore((s) => s.logoPaddingX);
+  const logoPaddingY = useProjectStore((s) => s.logoPaddingY);
   const persistDuration = useProjectStore((s) => s.setDuration);
   const durationPersisted = useRef(false);
 
@@ -145,6 +151,15 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
           onPause={() => setIsPlaying(false)}
           data-playing={isPlaying}
         />
+        {logoUrl && (
+          // eslint-disable-next-line @next/next/no-img-element -- served from local storage, not a static asset Next can optimize
+          <img
+            src={logoUrl}
+            alt=""
+            className="pointer-events-none absolute max-h-[15%] max-w-[25%] object-contain"
+            style={logoPositionToCss(logoPosition, logoPaddingX, logoPaddingY)}
+          />
+        )}
         {burnInCaptions && activeCue && (
           <div
             className={`pointer-events-none absolute inset-x-0 flex justify-center px-4 ${CAPTION_POSITION_CLASS[captionStyle.position]}`}

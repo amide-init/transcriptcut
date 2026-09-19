@@ -9,6 +9,7 @@ import { generateCaptions } from "@/lib/captions/generate";
 import { toAssKaraoke, toSrt } from "@/lib/captions/format";
 import { DEFAULT_CAPTION_STYLE, type CaptionStyle } from "@/lib/captions/style";
 import { DEFAULT_VIDEO_PROPERTIES } from "@/types/video-properties";
+import { toLogoPosition } from "@/lib/video/logo";
 import type { CutOperation, EditOperation } from "@/types/edit-operation";
 import type { Transcript } from "@/types/transcript";
 
@@ -35,6 +36,7 @@ export async function runRenderJob(
 
     const originalAsset = project.assets.find((a) => a.kind === "original");
     if (!originalAsset) throw new Error("No source video for this project.");
+    const logoAsset = project.assets.find((a) => a.kind === "logo");
 
     const cuts = project.editOperations
       .map((op) => JSON.parse(op.dataJson) as EditOperation)
@@ -76,6 +78,10 @@ export async function runRenderJob(
       properties: project.propertiesJson ? JSON.parse(project.propertiesJson) : DEFAULT_VIDEO_PROPERTIES,
       srtPath: subtitlesPath,
       captionStyle: subtitlesPath && !useKaraoke ? (options.captionStyle ?? DEFAULT_CAPTION_STYLE) : undefined,
+      logoPath: logoAsset ? resolveInDataDir(logoAsset.filePath) : undefined,
+      logoPosition: logoAsset ? toLogoPosition(project.logoPosition) : undefined,
+      logoPaddingX: logoAsset ? project.logoPaddingX : undefined,
+      logoPaddingY: logoAsset ? project.logoPaddingY : undefined,
     });
     await runFfmpeg(args);
 

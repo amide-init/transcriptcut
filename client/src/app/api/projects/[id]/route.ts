@@ -38,6 +38,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
   );
 
   const originalAsset = project.assets.find((a) => a.kind === "original") ?? null;
+  const logoAsset = project.assets.find((a) => a.kind === "logo") ?? null;
 
   return NextResponse.json({
     success: true,
@@ -49,12 +50,16 @@ export async function GET(_request: Request, { params }: RouteContext) {
       burnInCaptions: project.burnInCaptions,
       captionStyle: project.captionStyleJson ? JSON.parse(project.captionStyleJson) : null,
       properties: project.propertiesJson ? JSON.parse(project.propertiesJson) : null,
+      logoPosition: project.logoPosition,
+      logoPaddingX: project.logoPaddingX,
+      logoPaddingY: project.logoPaddingY,
       createdAt: project.createdAt,
       updatedAt: project.updatedAt,
     },
     transcript,
     operations,
     videoUrl: originalAsset ? `/api/projects/${project.id}/video` : null,
+    logoUrl: logoAsset ? `/api/projects/${project.id}/logo` : null,
   });
 }
 

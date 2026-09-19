@@ -22,6 +22,11 @@ model Project {
   /// JSON-serialized VideoProperties (see src/types/video-properties.ts), null = use the client default (all zero).
   propertiesJson String?
 
+  /// "top-left" | "top-right" | "bottom-left" | "bottom-right" -- see src/lib/video/logo.ts
+  logoPosition String @default("bottom-right")
+  logoPaddingX Int    @default(16)
+  logoPaddingY Int    @default(16)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

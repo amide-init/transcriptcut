@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { captionStyleSchema } from "@/lib/validation/caption-style";
 import { videoPropertiesSchema } from "@/lib/validation/video-properties";
+import { logoSettingsSchema } from "@/lib/validation/logo";
 
 export const createProjectSchema = z.object({
   name: z.string().trim().min(1).max(200),
@@ -17,6 +18,7 @@ export const updateProjectSchema = z
     captionStyle: captionStyleSchema,
     /// Validated then re-serialized -- propertiesJson is the actual Prisma column.
     properties: videoPropertiesSchema,
+    ...logoSettingsSchema.shape,
   })
   .partial()
   .refine((data) => Object.keys(data).length > 0, {
