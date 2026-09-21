@@ -11,7 +11,8 @@ import { useCaptionStyleStore } from "@/stores/caption-style-store";
 import { useProjectStore } from "@/stores/project-store";
 import { Button } from "@/components/ui/button";
 
-const FONT_SIZES = [16, 20, 24, 28, 32, 40, 48];
+/** Percent of frame height -- see lib/captions/style.ts. */
+const FONT_SIZES = [1.5, 1.9, 2.2, 2.6, 3.0, 3.7, 4.4];
 
 export function CaptionsPanel() {
   const projectId = useProjectStore((s) => s.id);
@@ -108,7 +109,7 @@ export function CaptionsPanel() {
         >
           {FONT_SIZES.map((size) => (
             <option key={size} value={size}>
-              {size}px
+              {size}%
             </option>
           ))}
         </select>

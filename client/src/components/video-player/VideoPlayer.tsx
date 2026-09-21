@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type CSSProperties } from "react";
 import { Pause, Play } from "lucide-react";
 import { usePlayerStore } from "@/stores/player-store";
 import { useTimelineStore } from "@/stores/timeline-store";
 import { useTranscriptStore } from "@/stores/transcript-store";
 import { useProjectStore } from "@/stores/project-store";
 import { useCaptionStyleStore } from "@/stores/caption-style-store";
-import type { CaptionPosition } from "@/lib/captions/style";
+import { CAPTION_MARGIN_V_PERCENT, type CaptionPosition } from "@/lib/captions/style";
 import {
   computePlayableRanges,
   editedTimeToSourceTime,
@@ -23,11 +23,19 @@ import { buildPropertiesCss } from "@/lib/video/properties";
 import { logoPositionToCss } from "@/lib/video/logo";
 import type { CutOperation } from "@/types/edit-operation";
 
-/** Approximates libass's numpad-alignment vertical placement (see lib/captions/style.ts). */
-const CAPTION_POSITION_CLASS: Record<CaptionPosition, string> = {
-  top: "top-3",
-  middle: "top-1/2 -translate-y-1/2",
-  bottom: "bottom-3",
+/**
+ * Approximates libass's numpad-alignment vertical placement (see
+ * lib/captions/style.ts). `cqh` ties the inset to CAPTION_MARGIN_V_PERCENT
+ * of the *video container's* own height (via `container-type: size` on
+ * that container below), matching the export's MarginV -- which is also a
+ * percent of frame height, just realized in ASS's own coordinate space --
+ * instead of a fixed on-screen px offset that meant a different fraction
+ * of the frame depending on how big the preview happened to be rendered.
+ */
+const CAPTION_VERTICAL_STYLE: Record<CaptionPosition, CSSProperties> = {
+  top: { top: `${CAPTION_MARGIN_V_PERCENT}cqh` },
+  middle: { top: "50%", transform: "translateY(-50%)" },
+  bottom: { bottom: `${CAPTION_MARGIN_V_PERCENT}cqh` },
 };
 
 export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
@@ -144,7 +152,15 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
 
   return (
     <div className="flex h-full w-full flex-col bg-black">
-      <div className="relative min-h-0 flex-1">
+      {/*
+        container-type:size makes `cqh` units below resolve against THIS
+        element's own rendered height (which already matches the video's
+        aspect ratio -- see EditorLayout.tsx/player-store.ts), independent
+        of the on-screen preview's actual pixel size. That's what lets the
+        caption font-size/margin be a true frame-relative percent in CSS,
+        the same way ffmpeg's PlayResY does for the export (GitHub #22).
+      */}
+      <div className="relative min-h-0 flex-1 [container-type:size]">
         <video
           ref={videoRef}
           src={videoUrl}
@@ -168,13 +184,14 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
         )}
         {burnInCaptions && activeCue && (
           <div
-            className={`pointer-events-none absolute inset-x-0 flex justify-center px-4 ${CAPTION_POSITION_CLASS[captionStyle.position]}`}
+            className="pointer-events-none absolute inset-x-0 flex justify-center px-4"
+            style={CAPTION_VERTICAL_STYLE[captionStyle.position]}
           >
             <span
               className={`max-w-[90%] text-center font-medium ${captionStyle.background ? "rounded bg-black/70 px-2.5 py-1" : "px-1"}`}
               style={{
                 fontFamily: captionStyle.font,
-                fontSize: `${captionStyle.fontSize}px`,
+                fontSize: `${captionStyle.fontSize}cqh`,
                 color: captionStyle.wordHighlight ? undefined : captionStyle.textColor,
                 WebkitTextStroke: `1px ${captionStyle.outlineColor}`,
                 textShadow: captionStyle.background
