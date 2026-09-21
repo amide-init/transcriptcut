@@ -42,6 +42,7 @@ export default async function EditorPage(props: PageProps<"/editor/[projectId]">
         logoPosition: toLogoPosition(project.logoPosition),
         logoPaddingX: project.logoPaddingX,
         logoPaddingY: project.logoPaddingY,
+        logoOpacity: project.logoOpacity,
         videoUrl: hasVideo ? `/api/projects/${project.id}/video` : null,
         logoUrl: hasLogo ? `/api/projects/${project.id}/logo` : null,
       }}

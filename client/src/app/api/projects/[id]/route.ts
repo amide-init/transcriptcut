@@ -53,6 +53,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
       logoPosition: project.logoPosition,
       logoPaddingX: project.logoPaddingX,
       logoPaddingY: project.logoPaddingY,
+      logoOpacity: project.logoOpacity,
       createdAt: project.createdAt,
       updatedAt: project.updatedAt,
     },

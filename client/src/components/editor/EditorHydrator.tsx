@@ -22,6 +22,7 @@ type HydrateProject = {
   logoPosition: LogoPosition;
   logoPaddingX: number;
   logoPaddingY: number;
+  logoOpacity: number;
   videoUrl: string | null;
   logoUrl: string | null;
 };
