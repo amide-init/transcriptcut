@@ -6,12 +6,17 @@ function clamp(v: number, min: number, max: number): number {
 
 /**
  * Maps the manual property sliders (Saturation/Temperature/Tint/Exposure/
- * Contrast/Highlights/Shadows) to an FFmpeg filter chain for export. Uses
- * filters built for actual tonal-range adjustment -- `exposure` for
- * exposure/shadows, `colorlevels` for highlights, `colortemperature` and
- * `colorbalance` for temperature/tint -- so these should look more accurate
- * here than the CSS approximation the live preview uses
- * (lib/video/properties.ts), which has no dedicated primitives for them.
+ * Contrast/Highlights/Shadows) to an FFmpeg filter chain for export.
+ * Saturation, contrast, and exposure are verified EXACT matches to the live
+ * preview's CSS (lib/video/properties.ts#buildPropertiesCss); highlights is
+ * a verified exact match to the preview's SVG filter
+ * (buildPropertiesSvgValues in the same file) -- all confirmed empirically
+ * by rendering a test gradient through each filter and sampling pixels, not
+ * just assumed from docs (GitHub issue #23). Shadows and temperature/tint
+ * remain approximate on the preview side (see buildPropertiesSvgValues'
+ * doc comment for why) even though this export path uses the "real" tonal
+ * filters -- `colorlevels` for highlights, `colortemperature`/
+ * `colorbalance` for temperature/tint.
  *
  * Returns null when every property is at its neutral (0) value, so callers
  * can skip adding a filter step entirely.
@@ -27,7 +32,13 @@ export function buildPropertiesFilter(props: VideoProperties): string | null {
 
   if (props.exposure !== 0 || props.shadows !== 0) {
     const exposure = clamp(props.exposure / 100, -3, 3);
-    const black = clamp(props.shadows / 300, -1, 1);
+    // Verified empirically (rendered a test gradient through the exposure
+    // filter and sampled pixels): a POSITIVE black value CRUSHES shadows
+    // (raises the input black point, clipping more of the low end to
+    // pure black), not lifts them. Negated here so a positive shadows
+    // slider lifts/brightens shadows, matching the conventional direction
+    // (and the live preview's shadows control) instead of the opposite.
+    const black = clamp(-props.shadows / 300, -1, 1);
     parts.push(`exposure=exposure=${exposure.toFixed(3)}:black=${black.toFixed(3)}`);
   }
 
