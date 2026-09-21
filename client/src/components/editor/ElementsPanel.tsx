@@ -148,13 +148,13 @@ export function ElementsPanel() {
             <label className="flex flex-col gap-1">
               <div className="flex items-center justify-between text-xs text-foreground">
                 <span>Padding X</span>
-                <span className="font-mono tabular-nums text-muted-foreground">{logoPaddingX}</span>
+                <span className="font-mono tabular-nums text-muted-foreground">{logoPaddingX}%</span>
               </div>
               <input
                 type="range"
                 min={0}
-                max={200}
-                step={1}
+                max={20}
+                step={0.5}
                 value={logoPaddingX}
                 onChange={(e) => setLogoPadding(Number(e.target.value), logoPaddingY)}
                 className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-white/20 accent-primary"
@@ -163,13 +163,13 @@ export function ElementsPanel() {
             <label className="flex flex-col gap-1">
               <div className="flex items-center justify-between text-xs text-foreground">
                 <span>Padding Y</span>
-                <span className="font-mono tabular-nums text-muted-foreground">{logoPaddingY}</span>
+                <span className="font-mono tabular-nums text-muted-foreground">{logoPaddingY}%</span>
               </div>
               <input
                 type="range"
                 min={0}
-                max={200}
-                step={1}
+                max={20}
+                step={0.5}
                 value={logoPaddingY}
                 onChange={(e) => setLogoPadding(logoPaddingX, Number(e.target.value))}
                 className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-white/20 accent-primary"

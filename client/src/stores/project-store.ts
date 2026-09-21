@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { DEFAULT_VIDEO_PROPERTIES, type VideoProperties } from "@/types/video-properties";
 import {
   DEFAULT_LOGO_OPACITY,
-  DEFAULT_LOGO_PADDING,
+  DEFAULT_LOGO_PADDING_PERCENT,
   DEFAULT_LOGO_POSITION,
   type LogoPosition,
 } from "@/lib/video/logo";
@@ -71,8 +71,8 @@ const initialState = {
   properties: DEFAULT_VIDEO_PROPERTIES,
   logoUrl: null as string | null,
   logoPosition: DEFAULT_LOGO_POSITION,
-  logoPaddingX: DEFAULT_LOGO_PADDING,
-  logoPaddingY: DEFAULT_LOGO_PADDING,
+  logoPaddingX: DEFAULT_LOGO_PADDING_PERCENT,
+  logoPaddingY: DEFAULT_LOGO_PADDING_PERCENT,
   logoOpacity: DEFAULT_LOGO_OPACITY,
 };
 
