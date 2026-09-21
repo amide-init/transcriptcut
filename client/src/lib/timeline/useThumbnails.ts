@@ -6,8 +6,15 @@ import { computePlayableRanges } from "@/lib/timeline/cuts";
 
 const THUMB_WIDTH = 160;
 const THUMB_HEIGHT = 90;
-/** One thumbnail roughly every this many seconds of footage. */
-const DEFAULT_INTERVAL_SECONDS = 2;
+/**
+ * Default spacing when the caller doesn't pass its own `intervalSeconds` --
+ * also the coarsest interval Timeline.tsx's zoom-driven calculation clamps
+ * to at "fit" zoom, so zooming in only ever makes thumbnails denser, never
+ * sparser than this.
+ */
+export const DEFAULT_INTERVAL_SECONDS = 2;
+/** Finest spacing Timeline.tsx's zoom-driven calculation clamps to, even at max zoom -- see GitHub issue #26. */
+export const MIN_INTERVAL_SECONDS = 1;
 /** Safety cap per range so a pathologically long, uncut video can't queue up an unbounded number of sequential seeks. */
 const MAX_THUMBNAILS_PER_RANGE = 200;
 
@@ -20,9 +27,12 @@ export type RangeThumbnails = Record<number, string[]>;
  * are source-video time (playableRanges are already in source time, per
  * lib/timeline/cuts.ts), so cut-out sections are skipped automatically.
  *
- * `intervalSeconds` is the spacing between thumbnails (default: one every
- * 2 seconds of footage), not a total count -- longer videos/ranges get
- * proportionally more thumbnails.
+ * `intervalSeconds` is the spacing between thumbnails, not a total count --
+ * longer videos/ranges get proportionally more thumbnails at the same
+ * interval. Timeline.tsx derives this from the current zoom level (denser
+ * as you zoom in, down to MIN_INTERVAL_SECONDS) so thumbnails stay roughly
+ * the same size on screen instead of the same fixed set stretching wider
+ * -- see GitHub issue #26.
  *
  * Returns a map of playable-range index -> ordered data URLs, filled in
  * progressively as frames are grabbed (sequential seeks, not parallel --

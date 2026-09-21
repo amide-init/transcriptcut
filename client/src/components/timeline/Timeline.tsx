@@ -13,7 +13,7 @@ import {
 } from "@/lib/timeline/cuts";
 import { formatTimecode } from "@/lib/timeline/format";
 import { useWaveform } from "@/lib/timeline/useWaveform";
-import { useThumbnails } from "@/lib/timeline/useThumbnails";
+import { DEFAULT_INTERVAL_SECONDS, MIN_INTERVAL_SECONDS, useThumbnails } from "@/lib/timeline/useThumbnails";
 import { Button } from "@/components/ui/button";
 import { Waveform } from "@/components/timeline/Waveform";
 import type { CutOperation } from "@/types/edit-operation";
@@ -22,6 +22,9 @@ import type { CutOperation } from "@/types/edit-operation";
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 8;
 const ZOOM_STEP = 1.5;
+
+/** Roughly how wide a single thumbnail should render on screen, in px, at any zoom level. */
+const TARGET_THUMBNAIL_DISPLAY_WIDTH_PX = 100;
 
 export function Timeline() {
   const trackRef = useRef<HTMLDivElement>(null);
@@ -67,8 +70,18 @@ export function Timeline() {
   const pxPerSecond = fitPxPerSecond !== null ? fitPxPerSecond * zoom : 0;
   const trackWidth = pxPerSecond > 0 ? editedDuration * pxPerSecond : 0;
 
-  // One thumbnail every ~2s of footage (useThumbnails' default).
-  const thumbnails = useThumbnails(videoUrl, duration, cuts);
+  // Denser thumbnails as you zoom in -- targets a roughly constant on-screen
+  // thumbnail width instead of the same fixed set of images stretching
+  // wider (GitHub issue #26), clamped so zoom never makes them coarser than
+  // the default (zoomed all the way out) or finer than 1s apart (max zoom).
+  const thumbnailIntervalSeconds =
+    pxPerSecond > 0
+      ? Math.min(
+          DEFAULT_INTERVAL_SECONDS,
+          Math.max(MIN_INTERVAL_SECONDS, TARGET_THUMBNAIL_DISPLAY_WIDTH_PX / pxPerSecond)
+        )
+      : DEFAULT_INTERVAL_SECONDS;
+  const thumbnails = useThumbnails(videoUrl, duration, cuts, thumbnailIntervalSeconds);
 
   // Keep the playhead in view as it moves during playback, and when zoom changes.
   useEffect(() => {
