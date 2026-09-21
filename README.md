@@ -52,3 +52,18 @@ pnpm run dev
 Open [http://localhost:3000](http://localhost:3000). See
 [`.env.example`](./client/.env.example) for what each variable does, and
 [`CONTRIBUTING.md`](./CONTRIBUTING.md) for more.
+
+## Testing
+
+Deterministic unit tests (Vitest) cover the core editing logic — timeline
+cut/trim math, transcript-to-caption mapping, the ffmpeg render-plan
+builder, path-traversal safety, and the CSS-preview/ffmpeg-export formula
+parity work described in the issue tracker:
+
+```bash
+cd client
+pnpm run test
+```
+
+CI runs the same command on every PR. There's no end-to-end/UI test suite
+yet — see the issue tracker if that's something you'd like to help with.

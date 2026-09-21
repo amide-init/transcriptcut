@@ -28,10 +28,15 @@ include libass — see the `FFMPEG_PATH` note in `.env.example`.
 ```bash
 cd client
 pnpm run lint
+pnpm run test
 pnpm run build
 ```
 
-Both must pass — CI runs the same two commands on every PR.
+All three must pass — CI runs the same three commands on every PR. If
+you're changing pure logic (timeline math, transcript mapping, ffmpeg
+argument/filter-string building, validation, path handling), add or update
+a test in the matching `*.test.ts` file rather than only checking it by
+hand — `pnpm run test:watch` re-runs on save.
 
 ## Project structure and conventions
 
