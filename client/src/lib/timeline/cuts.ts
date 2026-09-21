@@ -117,6 +117,20 @@ export function isFullyCut(words: TranscriptWord[], cuts: CutOperation[]): boole
 }
 
 /**
+ * Every cut operation whose range overlaps [start, end) at all -- used to
+ * find which operation(s) to remove when restoring a specific cut word or
+ * segment, rather than only being able to undo the single most recent edit.
+ * If [start, end) was covered by one bigger cut (e.g. a whole segment
+ * delete), restoring any one word inside it removes that whole operation --
+ * there's no way to carve a single word back out of an operation that
+ * removed more than it, since a CutOperation is just one [start, end)
+ * range, not a set of words.
+ */
+export function cutsOverlapping(start: number, end: number, cuts: CutOperation[]): CutOperation[] {
+  return cuts.filter((c) => c.start < end && c.end > start);
+}
+
+/**
  * If sourceTime falls inside a cut, return the start of the next playable
  * range (so playback can jump forward over it). Returns null if sourceTime
  * is at/after the end of the last playable range (end of edited video).

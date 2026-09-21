@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   computePlayableRanges,
+  cutsOverlapping,
   editedTimeToSourceTime,
   getEditedDuration,
   isCut,
@@ -286,5 +287,30 @@ describe("padCutStart", () => {
   it("respects a custom pad duration", () => {
     const allWords = [{ start: 0, end: 1 }];
     expect(padCutStart(2, allWords, 0.5)).toBe(1.5);
+  });
+});
+
+describe("cutsOverlapping", () => {
+  it("finds the single cut covering a word inside a bigger range", () => {
+    const cuts = [cut(2, 5), cut(8, 10)];
+    expect(cutsOverlapping(3, 3.5, cuts)).toEqual([cuts[0]]);
+  });
+
+  it("returns every cut that overlaps at all, not just ones fully containing the range", () => {
+    // A word-select delete's own cut partially overlaps a neighboring
+    // filler-word cut -- restoring either one's word should surface both.
+    const cuts = [cut(2, 4), cut(3.9, 6)];
+    expect(cutsOverlapping(3.5, 4.5, cuts)).toEqual(cuts);
+  });
+
+  it("is empty when the range isn't cut at all", () => {
+    expect(cutsOverlapping(10, 11, [cut(2, 5)])).toEqual([]);
+  });
+
+  it("excludes a cut that only touches the range's edge, not its interior", () => {
+    // [start, end) semantics, same as isCut/isWordCut: touching at a single
+    // instant isn't an overlap.
+    expect(cutsOverlapping(5, 6, [cut(2, 5)])).toEqual([]);
+    expect(cutsOverlapping(0, 2, [cut(2, 5)])).toEqual([]);
   });
 });

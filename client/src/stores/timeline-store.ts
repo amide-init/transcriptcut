@@ -7,6 +7,15 @@ type TimelineStore = {
   redoStack: EditOperation[];
 
   addCut: (start: number, end: number, reason?: string) => void;
+  /**
+   * Removes specific operations by id, regardless of where they sit in
+   * history -- unlike undo/redo (which only ever act on the top of the
+   * stack), this lets a user restore one particular cut word/segment/
+   * sentence directly. Clears the redo stack, same as addCut: once history
+   * has been edited out of order like this, replaying old undo()s no
+   * longer has a well-defined meaning.
+   */
+  removeOperations: (operationIds: string[]) => void;
   undo: () => void;
   redo: () => void;
   /** Load persisted operations for a project (editor page on mount). */
@@ -49,6 +58,15 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
     };
     set((s) => ({ operations: [...s.operations, op], redoStack: [] }));
     persistOperation(get().projectId, op);
+  },
+
+  removeOperations: (operationIds) => {
+    const idSet = new Set(operationIds);
+    const { operations, projectId } = get();
+    const toRemove = operations.filter((op) => idSet.has(op.id));
+    if (toRemove.length === 0) return;
+    set((s) => ({ operations: s.operations.filter((op) => !idSet.has(op.id)), redoStack: [] }));
+    for (const op of toRemove) deleteOperation(projectId, op.id);
   },
 
   undo: () => {

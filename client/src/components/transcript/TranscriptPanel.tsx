@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { X } from "lucide-react";
+import { RotateCcw, X } from "lucide-react";
 import { useTranscriptStore } from "@/stores/transcript-store";
 import { useTimelineStore } from "@/stores/timeline-store";
 import { usePlayerStore } from "@/stores/player-store";
@@ -9,7 +9,7 @@ import { useProjectStore } from "@/stores/project-store";
 import { Button } from "@/components/ui/button";
 import { SpeakerLabel } from "@/components/transcript/SpeakerLabel";
 import { splitIntoSentences } from "@/lib/timeline/sentences";
-import { isWordCut, isFullyCut, padCutStart, wordSpanBounds } from "@/lib/timeline/cuts";
+import { cutsOverlapping, isWordCut, isFullyCut, padCutStart, wordSpanBounds } from "@/lib/timeline/cuts";
 import type { CutOperation } from "@/types/edit-operation";
 import type { TranscriptSegment } from "@/types/transcript";
 
@@ -26,6 +26,7 @@ export function TranscriptPanel() {
 
   const operations = useTimelineStore((s) => s.operations);
   const addCut = useTimelineStore((s) => s.addCut);
+  const removeOperations = useTimelineStore((s) => s.removeOperations);
   const cuts = useMemo(
     () => operations.filter((op): op is CutOperation => op.type === "cut"),
     [operations]
@@ -74,6 +75,20 @@ export function TranscriptPanel() {
     addCut(padCutStart(start, allWords), end, "segment");
   };
 
+  /**
+   * Restores whatever cut(s) overlap [start, end) -- a specific word,
+   * sentence, or segment -- instead of only being able to undo the single
+   * most recent edit. If those words were cut as part of a bigger
+   * operation (e.g. a whole segment delete), this restores that whole
+   * operation: a CutOperation is one [start, end) range, not a set of
+   * individual words, so there's no way to hand back only part of it.
+   */
+  const handleRestore = (start: number, end: number) => {
+    const overlapping = cutsOverlapping(start, end, cuts);
+    if (overlapping.length === 0) return;
+    removeOperations(overlapping.map((c) => c.id));
+  };
+
   const handleSpeakerChange = (segmentId: string, speaker: string | null) => {
     setSegmentSpeaker(segmentId, speaker);
     if (!projectId) return;
@@ -111,28 +126,41 @@ export function TranscriptPanel() {
           const sentences = splitIntoSentences(segment);
           return (
             <div key={segment.id} className="group/segment">
-              {(showSpeakerLabel || !segmentFullyCut) && (
-                <div className="mb-1 flex h-5 items-center justify-between">
-                  {showSpeakerLabel ? (
-                    <SpeakerLabel
-                      speaker={segment.speaker}
-                      onChange={(speaker) => handleSpeakerChange(segment.id, speaker)}
-                    />
-                  ) : (
-                    <span />
-                  )}
-                  {!segmentFullyCut && (
-                    <Button
-                      variant="ghost"
-                      size="xs"
-                      className="text-destructive opacity-0 hover:text-destructive group-hover/segment:opacity-100"
-                      onClick={() => handleDeleteSegment(segment)}
-                    >
-                      Delete segment
-                    </Button>
-                  )}
-                </div>
-              )}
+              <div className="mb-1 flex h-5 items-center justify-between">
+                {showSpeakerLabel ? (
+                  <SpeakerLabel
+                    speaker={segment.speaker}
+                    onChange={(speaker) => handleSpeakerChange(segment.id, speaker)}
+                  />
+                ) : (
+                  <span />
+                )}
+                {segmentFullyCut ? (
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    className="opacity-0 group-hover/segment:opacity-100"
+                    onClick={() => {
+                      const { start, end } = wordSpanBounds(segment.words, {
+                        start: segment.start,
+                        end: segment.end,
+                      });
+                      handleRestore(start, end);
+                    }}
+                  >
+                    Restore segment
+                  </Button>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    className="text-destructive opacity-0 hover:text-destructive group-hover/segment:opacity-100"
+                    onClick={() => handleDeleteSegment(segment)}
+                  >
+                    Delete segment
+                  </Button>
+                )}
+              </div>
               <p>
                 {sentences.map((sentence) => {
                   const sentenceFullyCut = isFullyCut(sentence.words, cuts);
@@ -150,14 +178,18 @@ export function TranscriptPanel() {
                           <span
                             key={word.id}
                             onClick={(e) => {
-                              if (cut) return;
+                              if (cut) {
+                                handleRestore(word.start, word.end);
+                                return;
+                              }
                               seek(word.start);
                               handleWordClick(word.id, e);
                             }}
+                            title={cut ? "Click to restore" : undefined}
                             className={[
                               "cursor-pointer rounded px-0.5 transition-colors",
                               cut
-                                ? "text-muted-foreground/50 line-through decoration-destructive/70"
+                                ? "text-muted-foreground/50 line-through decoration-destructive/70 hover:bg-muted/60"
                                 : "",
                               selected ? "bg-accent/30" : "",
                               active && !cut ? "bg-primary/25" : "",
@@ -170,7 +202,15 @@ export function TranscriptPanel() {
                           </span>
                         );
                       })}
-                      {!sentenceFullyCut && (
+                      {sentenceFullyCut ? (
+                        <button
+                          onClick={() => handleRestore(sentence.start, sentence.end)}
+                          className="hidden size-4 -translate-y-px items-center justify-center rounded text-muted-foreground hover:text-foreground group-hover/sentence:inline-flex"
+                          title="Restore sentence"
+                        >
+                          <RotateCcw className="size-3" />
+                        </button>
+                      ) : (
                         <button
                           onClick={() => handleDeleteSentence(sentence.start, sentence.end)}
                           className="hidden size-4 -translate-y-px items-center justify-center rounded text-muted-foreground hover:text-destructive group-hover/sentence:inline-flex"
