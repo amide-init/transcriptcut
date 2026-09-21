@@ -161,12 +161,42 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
     if (!video || !("requestVideoFrameCallback" in video)) return;
 
     let handle: number | null = null;
+    // While a seek we issued is still settling, requestVideoFrameCallback
+    // keeps firing for the frames in between -- each one can still report
+    // a stale (pre-seek) mediaTime that reads as "cut," which without this
+    // guard re-triggers the same seek again on every one of those frames
+    // (rVFC fires far more often than the old timeupdate-based check ever
+    // did). Repeatedly re-issuing video.currentTime in a tight loop like
+    // that is what produced the "freezes, audio crackles for a few
+    // seconds" symptom -- so once we seek to a target, don't seek again
+    // until a frame's mediaTime actually reaches it, confirming the
+    // previous seek settled. Safe even if it never lands exactly on the
+    // target: normal forward playback advances mediaTime past it within a
+    // few frames regardless.
+    let pendingSeekTarget: number | null = null;
+    // Caps how many frames we'll wait for a pending seek to settle before
+    // giving up on it -- without this, a seek that (for whatever reason,
+    // e.g. paused/at the end) never quite reaches its target would leave
+    // the guard permanently skipping the cut check from then on.
+    let pendingSeekFramesWaited = 0;
+    const MAX_SEEK_SETTLE_FRAMES = 15;
     const onFrame: VideoFrameRequestCallback = (_now, metadata) => {
+      if (pendingSeekTarget !== null && metadata.mediaTime < pendingSeekTarget) {
+        pendingSeekFramesWaited++;
+        if (pendingSeekFramesWaited < MAX_SEEK_SETTLE_FRAMES) {
+          handle = video.requestVideoFrameCallback(onFrame);
+          return;
+        }
+      }
+      pendingSeekTarget = null;
+      pendingSeekFramesWaited = 0;
+
       if (playableRanges.length > 0 && isCut(metadata.mediaTime, playableRanges)) {
         const next = nextPlayableTime(metadata.mediaTime, playableRanges);
         if (next === null) {
           video.pause();
         } else {
+          pendingSeekTarget = next;
           video.currentTime = next;
         }
       }
