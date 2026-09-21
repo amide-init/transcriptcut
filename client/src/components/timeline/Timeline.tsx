@@ -194,7 +194,7 @@ export function Timeline() {
                   style={{ width: `${((r.end - r.start) / editedDuration) * 100}%` }}
                   className="h-full border-r border-background last:border-r-0"
                 >
-                  <Waveform buffer={audioBuffer} start={r.start} end={r.end} />
+                  <Waveform buffer={audioBuffer} start={r.start} end={r.end} pxPerSecond={pxPerSecond} />
                 </div>
               ))}
             </div>

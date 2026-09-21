@@ -10,10 +10,23 @@ export function Waveform({
   buffer,
   start,
   end,
+  pxPerSecond,
 }: {
   buffer: AudioBuffer;
   start: number;
   end: number;
+  /**
+   * Not read directly -- computeRangePeaks already derives bucket count
+   * from the canvas's actual rendered `clientWidth` below, which is more
+   * precise than deriving it from this prop (avoids rounding drift from
+   * the range's own CSS % width). This is here purely so the effect
+   * re-runs (and re-measures clientWidth) when zoom changes the timeline's
+   * pixel width -- without it, zooming in just stretches the same raster
+   * computed at the old width via the browser's default canvas scaling,
+   * instead of redrawing at higher resolution (same bug class as the
+   * timeline thumbnails, GitHub issue #26).
+   */
+  pxPerSecond: number;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -43,7 +56,7 @@ export function Waveform({
       const barHeight = Math.max(1, peak * height);
       ctx.fillRect(i * barWidth, mid - barHeight / 2, Math.max(1, barWidth - 1), barHeight);
     });
-  }, [buffer, start, end]);
+  }, [buffer, start, end, pxPerSecond]);
 
   return <canvas ref={canvasRef} className="h-full w-full" />;
 }
