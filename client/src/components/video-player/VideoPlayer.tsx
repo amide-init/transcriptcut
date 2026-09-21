@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type CSSProperties } from "react";
+import { useEffect, useId, useRef, type CSSProperties } from "react";
 import { Pause, Play } from "lucide-react";
 import { usePlayerStore } from "@/stores/player-store";
 import { useTimelineStore } from "@/stores/timeline-store";
@@ -19,7 +19,7 @@ import {
 import { generateCaptions } from "@/lib/captions/generate";
 import { formatTimecode } from "@/lib/timeline/format";
 import { getFilterPreset } from "@/lib/video/filters";
-import { buildPropertiesCss } from "@/lib/video/properties";
+import { buildPropertiesCss, buildPropertiesSvgValues } from "@/lib/video/properties";
 import { logoPositionToCss } from "@/lib/video/logo";
 import type { CutOperation } from "@/types/edit-operation";
 
@@ -56,7 +56,20 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
 
   const filterId = useProjectStore((s) => s.filterId);
   const properties = useProjectStore((s) => s.properties);
-  const filterCss = [getFilterPreset(filterId).css, buildPropertiesCss(properties)]
+  // Highlights/shadows/temperature/tint have no CSS `filter` primitive, so
+  // they're applied via an inline SVG <filter> (rendered below) referenced
+  // as a `url(#id)` term alongside the plain CSS functions -- see
+  // lib/video/properties.ts#buildPropertiesSvgValues for what's exact vs
+  // approximate about it.
+  const svgFilterRawId = useId();
+  const svgFilterId = `video-properties-filter-${svgFilterRawId.replace(/[^a-zA-Z0-9-]/g, "")}`;
+  const svgValues = buildPropertiesSvgValues(properties);
+  const svgFilterNeeded = properties.highlights !== 0 || properties.shadows !== 0 || properties.temperature !== 0 || properties.tint !== 0;
+  const filterCss = [
+    getFilterPreset(filterId).css,
+    buildPropertiesCss(properties),
+    svgFilterNeeded ? `url(#${svgFilterId})` : "",
+  ]
     .filter((v) => v && v !== "none")
     .join(" ");
 
@@ -152,6 +165,28 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
 
   return (
     <div className="flex h-full w-full flex-col bg-black">
+      {svgFilterNeeded && (
+        <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden="true">
+          <defs>
+            <filter id={svgFilterId} colorInterpolationFilters="sRGB">
+              {/* Highlights: exact match to ffmpeg's colorlevels (see buildPropertiesSvgValues). */}
+              <feComponentTransfer>
+                <feFuncR type="linear" slope={svgValues.highlightsSlope} intercept={0} />
+                <feFuncG type="linear" slope={svgValues.highlightsSlope} intercept={0} />
+                <feFuncB type="linear" slope={svgValues.highlightsSlope} intercept={0} />
+              </feComponentTransfer>
+              {/* Shadows: approximate gamma lift, not an exact match -- see buildPropertiesSvgValues. */}
+              <feComponentTransfer>
+                <feFuncR type="gamma" amplitude={1} exponent={svgValues.shadowsExponent} offset={0} />
+                <feFuncG type="gamma" amplitude={1} exponent={svgValues.shadowsExponent} offset={0} />
+                <feFuncB type="gamma" amplitude={1} exponent={svgValues.shadowsExponent} offset={0} />
+              </feComponentTransfer>
+              {/* Temperature/tint: approximate channel-offset shift, not an exact match -- see buildPropertiesSvgValues. */}
+              <feColorMatrix type="matrix" values={svgValues.colorMatrix} />
+            </filter>
+          </defs>
+        </svg>
+      )}
       {/*
         container-type:size makes `cqh` units below resolve against THIS
         element's own rendered height (which already matches the video's
