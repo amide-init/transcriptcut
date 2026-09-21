@@ -147,11 +147,48 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
     return () => setVideoElement(null);
   }, [setVideoElement]);
 
+  // Frame-accurate cut-skip: the native `timeupdate` event (used as the
+  // fallback in handleTimeUpdate below) isn't guaranteed to fire every
+  // rendered frame, so a frame or two from inside a cut region can paint
+  // before that handler catches up -- a brief visible flash right at the
+  // cut. requestVideoFrameCallback fires on every actually-presented
+  // frame with its true media time, closing that gap. Not supported in
+  // Firefox as of writing, hence the feature check -- handleTimeUpdate's
+  // own isCut check (only gated off when this IS supported, see below)
+  // covers that fallback case.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !("requestVideoFrameCallback" in video)) return;
+
+    let handle: number | null = null;
+    const onFrame: VideoFrameRequestCallback = (_now, metadata) => {
+      if (playableRanges.length > 0 && isCut(metadata.mediaTime, playableRanges)) {
+        const next = nextPlayableTime(metadata.mediaTime, playableRanges);
+        if (next === null) {
+          video.pause();
+        } else {
+          video.currentTime = next;
+        }
+      }
+      handle = video.requestVideoFrameCallback(onFrame);
+    };
+    handle = video.requestVideoFrameCallback(onFrame);
+
+    return () => {
+      if (handle !== null) video.cancelVideoFrameCallback(handle);
+    };
+  }, [playableRanges]);
+
+  const supportsVideoFrameCallback =
+    typeof HTMLVideoElement !== "undefined" && "requestVideoFrameCallback" in HTMLVideoElement.prototype;
+
   const handleTimeUpdate = () => {
     const video = videoRef.current;
     if (!video) return;
     setCurrentTime(video.currentTime);
 
+    // The effect above already handles this frame-accurately when supported.
+    if (supportsVideoFrameCallback) return;
     if (playableRanges.length === 0) return;
     if (isCut(video.currentTime, playableRanges)) {
       const next = nextPlayableTime(video.currentTime, playableRanges);
