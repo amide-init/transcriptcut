@@ -1,9 +1,12 @@
 # AI Video Editor
 
-Edit video by editing its transcript, and by giving natural-language
-commands to an AI editor. **Local-first and open source** — runs entirely
-on your machine, no cloud account required. See [`claude.md`](./claude.md)
-for the full product spec and the
+Edit video by editing its transcript, with a few explicit AI-assisted
+actions (filler-word and long-pause removal) layered on top — **not** a
+free-text "ask the AI to edit this" chat bar; an early version of that was
+built and worked, then deliberately removed (see Status below and
+`claude.md` section 3 for why). **Local-first and open source** — runs
+entirely on your machine, no cloud account required. See
+[`claude.md`](./claude.md) for the full product spec and the
 [issue tracker](https://github.com/amide-init/vdescript/issues) for
 current build status.
 
@@ -13,9 +16,28 @@ The full transcript ↔ video editing loop works end to end: create a
 project, upload a video, it's auto-transcribed with word-level
 timestamps, delete text in the transcript and the matching section of the
 video is cut — reflected on the timeline and skipped during playback,
-with undo/redo, a live-updating waveform, and live caption preview. A
-Descript-style filters drawer applies visual presets to the preview, and
-export renders the final MP4 (optionally with burned-in, styled captions).
+with undo/redo. The timeline shows zoomable frame thumbnails and a
+live-updating waveform (both get denser, not just stretched, as you zoom
+in).
+
+Editing tools beyond manual transcript cuts:
+
+- **Filler-word / long-pause detection** — algorithmic, not generative;
+  flags candidates for one-click removal. An LLM call only classifies
+  ambiguous single words ("like", "actually", ...) in context — it never
+  proposes cuts on its own.
+- **Filters** — a Descript-style drawer of color presets.
+- **Properties** — manual saturation / temperature / tint / exposure /
+  contrast / highlights / shadows sliders.
+- **Elements** — a logo/watermark overlay (position, padding, opacity).
+- **Captions** — font, size, color, position, and background-box styling,
+  plus an optional word-by-word karaoke-style highlight.
+
+Export renders the final MP4 with every preview effect above (filters,
+properties, logo, captions) baked in — the CSS-preview ↔ ffmpeg-export
+math for each is unit-tested (see Testing below) to catch the preview and
+the actual export drifting apart, which happened in practice for several
+of these (see the issue tracker's closed bugs).
 
 Local persistence (SQLite via Prisma) and project CRUD are built and in
 use. The separate `server/` directory isn't — see the
