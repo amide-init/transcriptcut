@@ -9,7 +9,7 @@ import { useProjectStore } from "@/stores/project-store";
 import { Button } from "@/components/ui/button";
 import { SpeakerLabel } from "@/components/transcript/SpeakerLabel";
 import { splitIntoSentences } from "@/lib/timeline/sentences";
-import { isWordCut, isFullyCut, wordSpanBounds } from "@/lib/timeline/cuts";
+import { isWordCut, isFullyCut, padCutStart, wordSpanBounds } from "@/lib/timeline/cuts";
 import type { CutOperation } from "@/types/edit-operation";
 import type { TranscriptSegment } from "@/types/transcript";
 
@@ -59,19 +59,19 @@ export function TranscriptPanel() {
     if (selected.length === 0) return;
     const start = Math.min(...selected.map((w) => w.start));
     const end = Math.max(...selected.map((w) => w.end));
-    addCut(start, end, "transcript edit");
+    addCut(padCutStart(start, allWords), end, "transcript edit");
     clearSelection();
   };
 
   const handleDeleteSentence = (start: number, end: number) => {
-    addCut(start, end, "sentence");
+    addCut(padCutStart(start, allWords), end, "sentence");
   };
 
   const handleDeleteSegment = (segment: TranscriptSegment) => {
     // Use the segment's own words for the cut boundary, not the raw
     // Whisper segment.start/end -- see wordSpanBounds' doc comment for why.
     const { start, end } = wordSpanBounds(segment.words, { start: segment.start, end: segment.end });
-    addCut(start, end, "segment");
+    addCut(padCutStart(start, allWords), end, "segment");
   };
 
   const handleSpeakerChange = (segmentId: string, speaker: string | null) => {

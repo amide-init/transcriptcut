@@ -3,6 +3,40 @@ import type { PlayableRange } from "@/types/timeline";
 import type { TranscriptWord } from "@/types/transcript";
 
 /**
+ * How much earlier than a word's reported `start` a cut is allowed to
+ * reach, to absorb speech-to-text timestamp imprecision. Confirmed
+ * empirically on a real transcript: Whisper reported a word's start as
+ * 4.08s, but the word was already clearly audible in the source audio's
+ * waveform from ~3.96s -- so a cut starting exactly at the reported
+ * timestamp left ~120ms of the real word audible right after the cut. This
+ * pad is deliberately larger than that one measurement to leave margin for
+ * worse cases, but is always clamped (see padCutStart) to the end of
+ * whatever word precedes the cut, so it can only reach into silence, never
+ * into that previous word's own real audio.
+ */
+export const CUT_START_PAD_SECONDS = 0.15;
+
+/**
+ * Extends a cut's start earlier, into the silence before it, by up to
+ * CUT_START_PAD_SECONDS -- see that constant's doc comment for why. Clamped
+ * to the end of the last word (from `allWords`, in chronological order)
+ * that ends at or before `start`, so the pad can never eat into that
+ * word's own audio, even for a cut with very little room before it (e.g. a
+ * filler word with almost no gap before the previous word).
+ */
+export function padCutStart(
+  start: number,
+  allWords: { start: number; end: number }[],
+  padSeconds: number = CUT_START_PAD_SECONDS
+): number {
+  let previousWordEnd = 0;
+  for (const w of allWords) {
+    if (w.end <= start && w.end > previousWordEnd) previousWordEnd = w.end;
+  }
+  return Math.max(previousWordEnd, start - padSeconds);
+}
+
+/**
  * [start, end] spanning every word in the list -- first word's start, last
  * word's end -- falling back to `fallback` if the list is empty. Use this
  * (not a container's own reported start/end, e.g. a Whisper

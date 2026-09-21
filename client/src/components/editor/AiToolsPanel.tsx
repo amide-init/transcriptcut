@@ -5,6 +5,7 @@ import { useTranscriptStore } from "@/stores/transcript-store";
 import { useTimelineStore } from "@/stores/timeline-store";
 import { useProjectStore } from "@/stores/project-store";
 import { detectSilences } from "@/lib/timeline/silence";
+import { padCutStart } from "@/lib/timeline/cuts";
 import { Button } from "@/components/ui/button";
 
 /** The two algorithmic (non-generative) editing aids: filler-word and long-pause detection. */
@@ -44,7 +45,7 @@ export function AiToolsPanel() {
     const fillerWordIdSet = new Set(fillerWordIds);
     for (const word of allWords) {
       if (fillerWordIdSet.has(word.id)) {
-        addCut(word.start, word.end, "filler word");
+        addCut(padCutStart(word.start, allWords), word.end, "filler word");
       }
     }
     setFillerWordIds([]);

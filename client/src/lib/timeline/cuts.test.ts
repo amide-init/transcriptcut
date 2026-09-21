@@ -7,6 +7,7 @@ import {
   isFullyCut,
   isWordCut,
   nextPlayableTime,
+  padCutStart,
   sourceTimeToEditedTime,
   wordSpanBounds,
 } from "@/lib/timeline/cuts";
@@ -248,5 +249,42 @@ describe("wordSpanBounds", () => {
 
   it("a single-word list spans just that word", () => {
     expect(wordSpanBounds([{ start: 3, end: 3.2 }], { start: 0, end: 0 })).toEqual({ start: 3, end: 3.2 });
+  });
+});
+
+describe("padCutStart", () => {
+  it("pulls the cut start earlier by the default pad when there's room", () => {
+    // Mirrors the real transcript that surfaced this: a natural pause (word
+    // ending at 3.28, next word reported starting at 4.08) between two
+    // sentences -- plenty of silence to safely absorb the pad into.
+    const allWords = [{ start: 2.8, end: 3.28 }];
+    expect(padCutStart(4.08, allWords)).toBeCloseTo(4.08 - 0.15, 10);
+  });
+
+  it("clamps to the end of the immediately preceding word instead of overrunning it", () => {
+    // Only 40ms of gap before the cut -- less than the default 0.15s pad,
+    // so the pad must not reach back into the previous word's own audio.
+    const allWords = [{ start: 2.0, end: 3.0 }];
+    expect(padCutStart(3.04, allWords)).toBe(3.0);
+  });
+
+  it("clamps to 0 when the cut is near the very start of the video (no preceding word)", () => {
+    expect(padCutStart(0.05, [])).toBe(0);
+  });
+
+  it("picks the correct preceding word out of several, not just the first/last in the list", () => {
+    const allWords = [
+      { start: 0, end: 1 },
+      { start: 1.2, end: 2 },
+      { start: 2.1, end: 2.9 },
+    ];
+    // Preceding word is [2.1, 2.9], not [0,1] or [1.2,2] -- pad reaches back
+    // to 2.9 at most (here the default 0.15s pad fits before that).
+    expect(padCutStart(3.2, allWords)).toBeCloseTo(3.2 - 0.15, 10);
+  });
+
+  it("respects a custom pad duration", () => {
+    const allWords = [{ start: 0, end: 1 }];
+    expect(padCutStart(2, allWords, 0.5)).toBe(1.5);
   });
 });
