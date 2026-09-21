@@ -1,10 +1,13 @@
 import type { FilterPreset } from "@/types/filter";
 
 /**
- * Preview-only visual presets, applied as a CSS `filter` on the video
- * element — not baked into the source. Actual rendering still runs
- * through FFmpeg at export time (not yet implemented), so these never
- * touch the underlying file directly.
+ * Named visual presets, applied as a CSS `filter` on the video element for
+ * the live preview -- never baked into the source file directly. Export
+ * renders the actual pixels through an equivalent FFmpeg filter chain
+ * instead (see ffmpeg/filters.ts#getFfmpegFilter), which is a close but not
+ * always pixel-exact match (some CSS filter functions, like sepia() and
+ * hue-rotate(), have no simple ffmpeg equivalent -- see that file's doc
+ * comment for which terms are verified exact vs. approximate).
  */
 export const FILTER_PRESETS: FilterPreset[] = [
   { id: "none", label: "None", css: "none" },
