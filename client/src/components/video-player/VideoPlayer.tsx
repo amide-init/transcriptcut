@@ -44,6 +44,7 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
   const seek = usePlayerStore((s) => s.seek);
   const clearSeekTarget = usePlayerStore((s) => s.clearSeekTarget);
   const setVideoElement = usePlayerStore((s) => s.setVideoElement);
+  const setAspectRatio = usePlayerStore((s) => s.setAspectRatio);
 
   const filterId = useProjectStore((s) => s.filterId);
   const properties = useProjectStore((s) => s.properties);
@@ -59,11 +60,14 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
   const persistDuration = useProjectStore((s) => s.setDuration);
   const durationPersisted = useRef(false);
 
-  const handleDurationKnown = (seconds: number) => {
-    setDuration(seconds);
+  const handleDurationKnown = (video: HTMLVideoElement) => {
+    setDuration(video.duration);
+    if (video.videoWidth && video.videoHeight) {
+      setAspectRatio(video.videoWidth / video.videoHeight);
+    }
     if (!durationPersisted.current) {
       durationPersisted.current = true;
-      persistDuration(seconds);
+      persistDuration(video.duration);
     }
   };
 
@@ -110,7 +114,7 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
   useEffect(() => {
     const video = videoRef.current;
     if (video && video.readyState >= 1 && !Number.isNaN(video.duration)) {
-      handleDurationKnown(video.duration);
+      handleDurationKnown(video);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [videoUrl]);
@@ -146,7 +150,7 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
           src={videoUrl}
           className="h-full w-full object-contain"
           style={{ filter: filterCss }}
-          onLoadedMetadata={(e) => handleDurationKnown(e.currentTarget.duration)}
+          onLoadedMetadata={(e) => handleDurationKnown(e.currentTarget)}
           onTimeUpdate={handleTimeUpdate}
           onPlay={() => setIsPlaying(true)}
           onPause={() => setIsPlaying(false)}
