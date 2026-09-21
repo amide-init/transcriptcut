@@ -63,6 +63,23 @@ Requires [FFmpeg](https://ffmpeg.org/download.html) on your machine
 (used for cuts and export) and an OpenAI API key (used server-side only,
 for transcription).
 
+### macOS quick start
+
+[`scripts/setup-mac.sh`](./scripts/setup-mac.sh) installs Node/pnpm/FFmpeg
+(with subtitle burn-in support) via Homebrew if you don't already have
+them, installs dependencies, and walks you through `.env`:
+
+```bash
+git clone https://github.com/amide-init/vdescript.git
+cd vdescript
+./scripts/setup-mac.sh
+```
+
+Then `cd client && pnpm run dev`. Safe to re-run -- it only installs
+what's missing and never overwrites an existing `.env`.
+
+### Manual setup (any platform)
+
 ```bash
 cd client
 pnpm install
