@@ -1,4 +1,4 @@
-# AI Video Editor
+# transcriptcut
 
 Edit video by editing its transcript, with a few explicit AI-assisted
 actions (filler-word and long-pause removal) layered on top — **not** a
@@ -7,7 +7,7 @@ built and worked, then deliberately removed (see Status below and
 `claude.md` section 3 for why). **Local-first and open source** — runs
 entirely on your machine, no cloud account required. See
 [`claude.md`](./claude.md) for the full product spec and the
-[issue tracker](https://github.com/amide-init/vdescript/issues) for
+[issue tracker](https://github.com/amide-init/transcriptcut/issues) for
 current build status.
 
 ## Status
@@ -41,7 +41,7 @@ of these (see the issue tracker's closed bugs).
 
 Local persistence (SQLite via Prisma) and project CRUD are built and in
 use. The separate `server/` directory isn't — see the
-[issue tracker](https://github.com/amide-init/vdescript/issues) for the
+[issue tracker](https://github.com/amide-init/transcriptcut/issues) for the
 full breakdown of what's done vs. planned. Everything currently runs
 inside the `client/` Next.js app, including the API routes.
 
@@ -70,8 +70,8 @@ for transcription).
 them, installs dependencies, and walks you through `.env`:
 
 ```bash
-git clone https://github.com/amide-init/vdescript.git
-cd vdescript
+git clone https://github.com/amide-init/transcriptcut.git
+cd transcriptcut
 ./scripts/setup-mac.sh
 ```
 

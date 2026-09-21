@@ -13,7 +13,7 @@ describe("storage/local (real fs, temp DATA_DIR)", () => {
   const originalDataDir = process.env.DATA_DIR;
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(path.join(tmpdir(), "vdescript-test-"));
+    tempDir = await mkdtemp(path.join(tmpdir(), "transcriptcut-test-"));
     process.env.DATA_DIR = tempDir;
   });
 

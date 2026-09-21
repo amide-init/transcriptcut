@@ -2,7 +2,7 @@
 
 Thanks for taking a look at this project. It's a small, local-first tool,
 and contributions are welcome — bug fixes, features from the
-[issue tracker](https://github.com/amide-init/vdescript/issues), or new
+[issue tracker](https://github.com/amide-init/transcriptcut/issues), or new
 issues for bugs and ideas.
 
 ## Running it locally
