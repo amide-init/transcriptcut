@@ -1,6 +1,11 @@
 import { create } from "zustand";
 import { DEFAULT_VIDEO_PROPERTIES, type VideoProperties } from "@/types/video-properties";
-import { DEFAULT_LOGO_PADDING, DEFAULT_LOGO_POSITION, type LogoPosition } from "@/lib/video/logo";
+import {
+  DEFAULT_LOGO_OPACITY,
+  DEFAULT_LOGO_PADDING,
+  DEFAULT_LOGO_POSITION,
+  type LogoPosition,
+} from "@/lib/video/logo";
 
 export type ProjectStatus = "empty" | "creating" | "uploading" | "transcribing" | "ready" | "error";
 
@@ -19,6 +24,7 @@ type ProjectStore = {
   logoPosition: LogoPosition;
   logoPaddingX: number;
   logoPaddingY: number;
+  logoOpacity: number;
 
   /** Updates local state and persists to the backend (fire-and-forget). */
   setName: (name: string) => void;
@@ -35,6 +41,8 @@ type ProjectStore = {
   setLogoPosition: (position: LogoPosition) => void;
   /** Updates local state immediately; persists debounced (sliders fire on every drag tick). */
   setLogoPadding: (paddingX: number, paddingY: number) => void;
+  /** Updates local state immediately; persists debounced (sliders fire on every drag tick). */
+  setLogoOpacity: (opacity: number) => void;
   /** Persist the video duration once known client-side (fire-and-forget). */
   setDuration: (seconds: number) => void;
   /** Load a persisted project into the store (editor page on mount). */
@@ -46,6 +54,7 @@ type ProjectStore = {
     logoPosition: LogoPosition;
     logoPaddingX: number;
     logoPaddingY: number;
+    logoOpacity: number;
     videoUrl: string | null;
     logoUrl: string | null;
   }) => void;
@@ -64,6 +73,7 @@ const initialState = {
   logoPosition: DEFAULT_LOGO_POSITION,
   logoPaddingX: DEFAULT_LOGO_PADDING,
   logoPaddingY: DEFAULT_LOGO_PADDING,
+  logoOpacity: DEFAULT_LOGO_OPACITY,
 };
 
 let propertiesDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -71,6 +81,9 @@ const PROPERTIES_DEBOUNCE_MS = 400;
 
 let logoPaddingDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 const LOGO_PADDING_DEBOUNCE_MS = 400;
+
+let logoOpacityDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+const LOGO_OPACITY_DEBOUNCE_MS = 400;
 
 export const useProjectStore = create<ProjectStore>((set, get) => ({
   ...initialState,
@@ -141,6 +154,20 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     }, LOGO_PADDING_DEBOUNCE_MS);
   },
 
+  setLogoOpacity: (logoOpacity) => {
+    set({ logoOpacity });
+    const { id } = get();
+    if (!id) return;
+    if (logoOpacityDebounceTimer) clearTimeout(logoOpacityDebounceTimer);
+    logoOpacityDebounceTimer = setTimeout(() => {
+      fetch(`/api/projects/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ logoOpacity }),
+      }).catch((err) => console.error("Failed to persist logo opacity:", err));
+    }, LOGO_OPACITY_DEBOUNCE_MS);
+  },
+
   setDuration: (duration) => {
     const { id } = get();
     if (!id) return;
@@ -160,6 +187,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       logoPosition: project.logoPosition,
       logoPaddingX: project.logoPaddingX,
       logoPaddingY: project.logoPaddingY,
+      logoOpacity: project.logoOpacity,
       videoUrl: project.videoUrl,
       logoUrl: project.logoUrl,
       status: "ready",

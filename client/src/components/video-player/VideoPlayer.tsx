@@ -55,6 +55,7 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
   const logoPosition = useProjectStore((s) => s.logoPosition);
   const logoPaddingX = useProjectStore((s) => s.logoPaddingX);
   const logoPaddingY = useProjectStore((s) => s.logoPaddingY);
+  const logoOpacity = useProjectStore((s) => s.logoOpacity);
   const persistDuration = useProjectStore((s) => s.setDuration);
   const durationPersisted = useRef(false);
 
@@ -157,7 +158,7 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
             src={logoUrl}
             alt=""
             className="pointer-events-none absolute max-h-[15%] max-w-[25%] object-contain"
-            style={logoPositionToCss(logoPosition, logoPaddingX, logoPaddingY)}
+            style={logoPositionToCss(logoPosition, logoPaddingX, logoPaddingY, logoOpacity)}
           />
         )}
         {burnInCaptions && activeCue && (

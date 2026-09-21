@@ -23,9 +23,11 @@ export function ElementsPanel() {
   const logoPosition = useProjectStore((s) => s.logoPosition);
   const logoPaddingX = useProjectStore((s) => s.logoPaddingX);
   const logoPaddingY = useProjectStore((s) => s.logoPaddingY);
+  const logoOpacity = useProjectStore((s) => s.logoOpacity);
   const setLogoUrl = useProjectStore((s) => s.setLogoUrl);
   const setLogoPosition = useProjectStore((s) => s.setLogoPosition);
   const setLogoPadding = useProjectStore((s) => s.setLogoPadding);
+  const setLogoOpacity = useProjectStore((s) => s.setLogoOpacity);
 
   const handleFileSelected = async (file: File) => {
     if (!projectId) return;
@@ -170,6 +172,27 @@ export function ElementsPanel() {
                 step={1}
                 value={logoPaddingY}
                 onChange={(e) => setLogoPadding(logoPaddingX, Number(e.target.value))}
+                className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-white/20 accent-primary"
+              />
+            </label>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <span className="text-[0.7rem] font-medium uppercase tracking-wide text-muted-foreground">
+              Opacity
+            </span>
+            <label className="flex flex-col gap-1">
+              <div className="flex items-center justify-between text-xs text-foreground">
+                <span>Opacity</span>
+                <span className="font-mono tabular-nums text-muted-foreground">{logoOpacity}%</span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={logoOpacity}
+                onChange={(e) => setLogoOpacity(Number(e.target.value))}
                 className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-white/20 accent-primary"
               />
             </label>
