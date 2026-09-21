@@ -12,6 +12,16 @@ export const DEFAULT_LOGO_POSITION: LogoPosition = "bottom-right";
 export const DEFAULT_LOGO_PADDING = 16;
 export const DEFAULT_LOGO_OPACITY = 100;
 
+/**
+ * Max logo size relative to the video frame, preserving aspect ratio and
+ * never upscaling past the source image's native size. Keep in sync with
+ * VideoPlayer.tsx's `max-w-[25%] max-h-[15%]` classes -- the ffmpeg export
+ * (ffmpeg/plan.ts) applies the same fractions via a `scale` filter so the
+ * exported logo size matches what was shown in the live preview.
+ */
+export const LOGO_MAX_WIDTH_FRACTION = 0.25;
+export const LOGO_MAX_HEIGHT_FRACTION = 0.15;
+
 /** Narrows the raw `Project.logoPosition` DB string (always app-written, but typed as `string` by Prisma) to `LogoPosition`. */
 export function toLogoPosition(value: string): LogoPosition {
   return (LOGO_POSITIONS as readonly string[]).includes(value)

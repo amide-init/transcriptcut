@@ -157,6 +157,7 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
           <img
             src={logoUrl}
             alt=""
+            // max-h/max-w % must match LOGO_MAX_HEIGHT_FRACTION/LOGO_MAX_WIDTH_FRACTION in lib/video/logo.ts, which the ffmpeg export scales the logo to match.
             className="pointer-events-none absolute max-h-[15%] max-w-[25%] object-contain"
             style={logoPositionToCss(logoPosition, logoPaddingX, logoPaddingY, logoOpacity)}
           />

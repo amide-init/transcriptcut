@@ -5,6 +5,7 @@ import { resolveInDataDir, statAsset } from "@/lib/storage/local";
 import { computePlayableRanges } from "@/lib/timeline/cuts";
 import { buildRenderArgs } from "@/lib/ffmpeg/plan";
 import { runFfmpeg } from "@/lib/ffmpeg/run";
+import { probeVideoDimensions } from "@/lib/ffmpeg/probe";
 import { generateCaptions } from "@/lib/captions/generate";
 import { toAssKaraoke, toSrt } from "@/lib/captions/format";
 import { DEFAULT_CAPTION_STYLE, type CaptionStyle } from "@/lib/captions/style";
@@ -48,6 +49,10 @@ export async function runRenderJob(
     const outputPath = resolveInDataDir(outputRelativePath);
     await mkdir(path.dirname(outputPath), { recursive: true });
 
+    // Only needed to size the logo overlay relative to the frame (see
+    // ffmpeg/plan.ts) -- skip the probe entirely when there's no logo.
+    const videoDimensions = logoAsset ? await probeVideoDimensions(inputPath) : undefined;
+
     let subtitlesPath: string | undefined;
     // Word-highlight needs per-word timing/color, which plain SRT can't carry --
     // burn it in as a self-styled .ass file with libass karaoke (\k) tags instead,
@@ -83,6 +88,8 @@ export async function runRenderJob(
       logoPaddingX: logoAsset ? project.logoPaddingX : undefined,
       logoPaddingY: logoAsset ? project.logoPaddingY : undefined,
       logoOpacity: logoAsset ? project.logoOpacity : undefined,
+      videoWidth: videoDimensions?.width,
+      videoHeight: videoDimensions?.height,
     });
     await runFfmpeg(args);
 

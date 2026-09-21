@@ -2,7 +2,12 @@ import type { PlayableRange } from "@/types/timeline";
 import { getFfmpegFilter } from "@/lib/ffmpeg/filters";
 import { buildPropertiesFilter } from "@/lib/ffmpeg/properties";
 import { buildForceStyle, type CaptionStyle } from "@/lib/captions/style";
-import { logoPositionToOverlayXY, type LogoPosition } from "@/lib/video/logo";
+import {
+  LOGO_MAX_HEIGHT_FRACTION,
+  LOGO_MAX_WIDTH_FRACTION,
+  logoPositionToOverlayXY,
+  type LogoPosition,
+} from "@/lib/video/logo";
 import type { VideoProperties } from "@/types/video-properties";
 
 function clampPadding(v: number): number {
@@ -75,6 +80,15 @@ export function buildRenderArgs(args: {
   logoPaddingY?: number;
   /** 0-100, defaults to fully opaque. */
   logoOpacity?: number;
+  /**
+   * Source video's pixel dimensions (from ffmpeg/probe.ts#probeVideoDimensions),
+   * used to cap the logo's export size to the same fraction of the frame the
+   * live preview uses. Required whenever logoPath/logoPosition are set --
+   * without it the logo is composited at its native resolution, which for a
+   * typical high-res watermark image looks far bigger than the preview.
+   */
+  videoWidth?: number;
+  videoHeight?: number;
 }): string[] {
   const {
     inputPath,
@@ -89,6 +103,8 @@ export function buildRenderArgs(args: {
     logoPaddingX,
     logoPaddingY,
     logoOpacity,
+    videoWidth,
+    videoHeight,
   } = args;
 
   if (playableRanges.length === 0) {
@@ -136,6 +152,9 @@ export function buildRenderArgs(args: {
   // Overlaid last (on top of color grading and captions) -- a watermark
   // should stay visible even if a caption happens to sit in the same corner.
   if (logoPath && logoPosition) {
+    if (!videoWidth || !videoHeight) {
+      throw new Error("Logo overlay requested but the source video's dimensions are unknown.");
+    }
     const { x, y } = logoPositionToOverlayXY(
       logoPosition,
       clampPadding(logoPaddingX ?? 0),
@@ -145,7 +164,20 @@ export function buildRenderArgs(args: {
     // input's alpha channel first so a partial-opacity watermark blends
     // instead of fully replacing the pixels underneath it.
     const opacityFraction = (clampOpacity(logoOpacity ?? 100) / 100).toFixed(3);
-    filterChains.push(`[1:v]format=rgba,colorchannelmixer=aa=${opacityFraction}[logosrc]`);
+    // Cap the logo to the same fraction of the frame the live preview uses
+    // (VideoPlayer.tsx's max-w/max-h CSS via lib/video/logo.ts's shared
+    // fractions), preserving aspect ratio and never upscaling past the
+    // source image's native size -- "min(1, ...)" is what prevents the
+    // upscale. Without this, the logo is composited at its native pixel
+    // resolution, which for a typical high-res watermark looks far bigger
+    // than the preview. Rounded to even pixels ("trunc(.../2)*2") since odd
+    // overlay dimensions can misalign chroma subsampling on the base video.
+    const maxLogoWidth = Math.round(videoWidth * LOGO_MAX_WIDTH_FRACTION);
+    const maxLogoHeight = Math.round(videoHeight * LOGO_MAX_HEIGHT_FRACTION);
+    const scaleFactor = `min(1,min(${maxLogoWidth}/iw,${maxLogoHeight}/ih))`;
+    filterChains.push(
+      `[1:v]format=rgba,scale=w='trunc(iw*${scaleFactor}/2)*2':h='trunc(ih*${scaleFactor}/2)*2',colorchannelmixer=aa=${opacityFraction}[logosrc]`
+    );
     filterChains.push(`${videoOutLabel}[logosrc]overlay=x=${x}:y=${y}[logoed]`);
     videoOutLabel = "[logoed]";
   }
