@@ -2,7 +2,15 @@ import OpenAI from "openai";
 import { z } from "zod";
 import type { Transcript } from "@/types/transcript";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// Constructed lazily, not at module scope -- see the identical note in
+// lib/ai/transcribe.ts. Deferred to first actual call so importing this
+// module (e.g. during `next build`'s page-data collection) doesn't
+// require OPENAI_API_KEY to already be set.
+let openai: OpenAI | null = null;
+function getOpenAI(): OpenAI {
+  if (!openai) openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  return openai;
+}
 
 /**
  * Detects filler words in a transcript, for the "Remove all filler words"
@@ -65,7 +73,7 @@ async function classifyCandidates(transcript: Transcript, candidates: Candidate[
   const fullText = transcript.segments.map((s) => s.text).join(" ");
   const candidateList = candidates.map((c) => `${c.key}: ${c.context}`).join("\n");
 
-  const completion = await openai.chat.completions.create({
+  const completion = await getOpenAI().chat.completions.create({
     model: "gpt-4o-mini",
     temperature: 0,
     response_format: { type: "json_object" },

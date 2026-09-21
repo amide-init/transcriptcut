@@ -39,3 +39,10 @@ jobs:
 
       - name: Build
         run: pnpm run build
+        env:
+          # Not required anymore (lib/ai/{transcribe,filler-words}.ts now
+          # construct their OpenAI client lazily on first call, not at
+          # module load, so `next build` succeeds even with this unset) --
+          # kept as defense-in-depth against that regressing back to eager
+          # construction. Not a real secret, no API calls happen during build.
+          OPENAI_API_KEY: dummy-key-for-ci-build-only
