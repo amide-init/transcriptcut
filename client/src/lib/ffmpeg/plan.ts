@@ -85,11 +85,13 @@ export function buildRenderArgs(args: {
   /** 0-100, defaults to fully opaque. */
   logoOpacity?: number;
   /**
-   * Source video's pixel dimensions (from ffmpeg/probe.ts#probeVideoDimensions),
-   * used to cap the logo's export size to the same fraction of the frame the
-   * live preview uses. Required whenever logoPath/logoPosition are set --
-   * without it the logo is composited at its native resolution, which for a
-   * typical high-res watermark image looks far bigger than the preview.
+   * Source video's pixel dimensions (from ffmpeg/probe.ts#probeVideoDimensions).
+   * Required whenever logoPath/logoPosition are set (caps the logo's export
+   * size to the same fraction of the frame the live preview uses -- without
+   * it the logo composites at its native resolution) and whenever srtPath +
+   * captionStyle are both set (force_style's FontSize/MarginV are literal
+   * output pixels with no built-in scaling, so they need the real output
+   * height to convert captionStyle.fontSize's percent into pixels).
    */
   videoWidth?: number;
   videoHeight?: number;
@@ -141,11 +143,21 @@ export function buildRenderArgs(args: {
   }
 
   if (srtPath) {
+    // force_style's FontSize/MarginV are literal, un-scaled output pixels
+    // -- verified empirically that ffmpeg's `original_size` option does
+    // NOT rescale them (byte-identical renders with/without it), unlike
+    // toAssKaraoke's ASS PlayResX/Y (a real libass feature, confirmed
+    // separately to actually rescale). So captionStyle's percent-of-frame
+    // fontSize needs the render's actual output height to convert to a
+    // literal pixel FontSize here.
+    if (captionStyle && !videoHeight) {
+      throw new Error("Captions requested but the source video's dimensions are unknown.");
+    }
     // filename= must be explicit -- a bare positional quoted value here
     // (`subtitles='path'`) fails to parse on newer ffmpeg builds as soon as
     // a second, colon-separated option (force_style) follows it.
     const styleOption = captionStyle
-      ? `:force_style='${escapeFilterOptionValue(buildForceStyle(captionStyle))}'`
+      ? `:force_style='${escapeFilterOptionValue(buildForceStyle(captionStyle, videoHeight!))}'`
       : "";
     filterChains.push(
       `${videoOutLabel}subtitles=filename='${escapeSubtitlesPath(srtPath)}'${styleOption}[captioned]`

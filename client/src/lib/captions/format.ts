@@ -1,5 +1,12 @@
 import type { CaptionCue } from "@/lib/captions/generate";
-import { ALIGNMENT_BY_POSITION, hexToAssColor, type CaptionStyle } from "@/lib/captions/style";
+import {
+  ALIGNMENT_BY_POSITION,
+  buildAssStyleFields,
+  CAPTION_REFERENCE_HEIGHT,
+  CAPTION_REFERENCE_WIDTH,
+  hexToAssColor,
+  type CaptionStyle,
+} from "@/lib/captions/style";
 
 function pad(n: number, width = 2): string {
   return n.toString().padStart(width, "0");
@@ -75,13 +82,18 @@ export function toAssKaraoke(cues: CaptionCue[], style: CaptionStyle): string {
     })
     .join("\n");
 
+  const fields = buildAssStyleFields(style, CAPTION_REFERENCE_HEIGHT);
+  const backColour = style.background ? fields.backColour : "&H00000000";
+
   return `[Script Info]
 ScriptType: v4.00+
 Collisions: Normal
+PlayResX: ${CAPTION_REFERENCE_WIDTH}
+PlayResY: ${CAPTION_REFERENCE_HEIGHT}
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,${style.font},${Math.round(style.fontSize)},${hexToAssColor(style.highlightColor)},${hexToAssColor(style.textColor)},${hexToAssColor(style.outlineColor)},${style.background ? "&H80000000" : "&H00000000"},0,0,0,0,100,100,0,0,${style.background ? 3 : 1},2,0,${ALIGNMENT_BY_POSITION[style.position]},10,10,20,1
+Style: Default,${style.font},${fields.fontSize},${hexToAssColor(style.highlightColor)},${hexToAssColor(style.textColor)},${hexToAssColor(style.outlineColor)},${backColour},0,0,0,0,100,100,0,0,${style.background ? 3 : 1},${fields.outline},${fields.shadow},${ALIGNMENT_BY_POSITION[style.position]},10,10,${fields.marginV},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text

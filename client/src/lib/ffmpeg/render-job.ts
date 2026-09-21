@@ -49,16 +49,21 @@ export async function runRenderJob(
     const outputPath = resolveInDataDir(outputRelativePath);
     await mkdir(path.dirname(outputPath), { recursive: true });
 
-    // Only needed to size the logo overlay relative to the frame (see
-    // ffmpeg/plan.ts) -- skip the probe entirely when there's no logo.
-    const videoDimensions = logoAsset ? await probeVideoDimensions(inputPath) : undefined;
-
     let subtitlesPath: string | undefined;
     // Word-highlight needs per-word timing/color, which plain SRT can't carry --
     // burn it in as a self-styled .ass file with libass karaoke (\k) tags instead,
     // and skip force_style entirely (the file's own [V4+ Styles] line already has
     // the chosen font/size/colors/position/background baked in).
     const useKaraoke = options.burnInCaptions && options.captionStyle?.wordHighlight === true;
+
+    // Needed to size the logo overlay relative to the frame, and to convert
+    // force_style's fontSize/margin from percent-of-frame into the literal
+    // output pixels it actually requires (see ffmpeg/plan.ts) -- skip the
+    // probe when neither applies. The karaoke .ass path doesn't need this:
+    // it scales itself via PlayResX/Y instead (see lib/captions/format.ts).
+    const needsVideoDimensions = Boolean(logoAsset) || (options.burnInCaptions && !useKaraoke);
+    const videoDimensions = needsVideoDimensions ? await probeVideoDimensions(inputPath) : undefined;
+
     if (options.burnInCaptions) {
       if (!project.transcript) throw new Error("Captions were requested but this project has no transcript.");
       const transcript: Transcript = {
