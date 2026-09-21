@@ -8,6 +8,7 @@ import {
   isWordCut,
   nextPlayableTime,
   sourceTimeToEditedTime,
+  wordSpanBounds,
 } from "@/lib/timeline/cuts";
 import type { CutOperation } from "@/types/edit-operation";
 import type { PlayableRange } from "@/types/timeline";
@@ -215,5 +216,37 @@ describe("sourceTimeToEditedTime / editedTimeToSourceTime round-trip", () => {
 
   it("editedTimeToSourceTime returns 0 for an empty range list", () => {
     expect(editedTimeToSourceTime(5, [])).toBe(0);
+  });
+});
+
+describe("wordSpanBounds", () => {
+  it("spans the first word's start to the last word's end", () => {
+    const words = [
+      { start: 1.0, end: 1.5 },
+      { start: 1.5, end: 2.0 },
+      { start: 2.0, end: 2.4 },
+    ];
+    expect(wordSpanBounds(words, { start: 0, end: 99 })).toEqual({ start: 1.0, end: 2.4 });
+  });
+
+  it("uses the fallback for an empty word list", () => {
+    expect(wordSpanBounds([], { start: 5, end: 10 })).toEqual({ start: 5, end: 10 });
+  });
+
+  it("regression: a word extending past a container's own reported end is not clipped", () => {
+    // Mirrors transcribe.ts tolerating a word up to 50ms past segment.end
+    // when assigning words to a segment -- deleting "the segment" must use
+    // the word's real end (2.55), not the segment's looser reported end
+    // (2.50), or a sliver of that word's footage survives the cut.
+    const segmentReportedBounds = { start: 1.0, end: 2.5 };
+    const words = [
+      { start: 1.0, end: 1.5 },
+      { start: 1.5, end: 2.55 }, // 50ms past the segment's own reported end
+    ];
+    expect(wordSpanBounds(words, segmentReportedBounds)).toEqual({ start: 1.0, end: 2.55 });
+  });
+
+  it("a single-word list spans just that word", () => {
+    expect(wordSpanBounds([{ start: 3, end: 3.2 }], { start: 0, end: 0 })).toEqual({ start: 3, end: 3.2 });
   });
 });

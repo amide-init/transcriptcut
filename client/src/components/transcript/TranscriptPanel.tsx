@@ -9,8 +9,9 @@ import { useProjectStore } from "@/stores/project-store";
 import { Button } from "@/components/ui/button";
 import { SpeakerLabel } from "@/components/transcript/SpeakerLabel";
 import { splitIntoSentences } from "@/lib/timeline/sentences";
-import { isWordCut, isFullyCut } from "@/lib/timeline/cuts";
+import { isWordCut, isFullyCut, wordSpanBounds } from "@/lib/timeline/cuts";
 import type { CutOperation } from "@/types/edit-operation";
+import type { TranscriptSegment } from "@/types/transcript";
 
 export function TranscriptPanel() {
   const transcript = useTranscriptStore((s) => s.transcript);
@@ -66,7 +67,10 @@ export function TranscriptPanel() {
     addCut(start, end, "sentence");
   };
 
-  const handleDeleteSegment = (start: number, end: number) => {
+  const handleDeleteSegment = (segment: TranscriptSegment) => {
+    // Use the segment's own words for the cut boundary, not the raw
+    // Whisper segment.start/end -- see wordSpanBounds' doc comment for why.
+    const { start, end } = wordSpanBounds(segment.words, { start: segment.start, end: segment.end });
     addCut(start, end, "segment");
   };
 
@@ -122,7 +126,7 @@ export function TranscriptPanel() {
                       variant="ghost"
                       size="xs"
                       className="text-destructive opacity-0 hover:text-destructive group-hover/segment:opacity-100"
-                      onClick={() => handleDeleteSegment(segment.start, segment.end)}
+                      onClick={() => handleDeleteSegment(segment)}
                     >
                       Delete segment
                     </Button>

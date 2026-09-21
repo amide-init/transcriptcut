@@ -2,6 +2,26 @@ import type { CutOperation } from "@/types/edit-operation";
 import type { PlayableRange } from "@/types/timeline";
 import type { TranscriptWord } from "@/types/transcript";
 
+/**
+ * [start, end] spanning every word in the list -- first word's start, last
+ * word's end -- falling back to `fallback` if the list is empty. Use this
+ * (not a container's own reported start/end, e.g. a Whisper
+ * TranscriptSegment's `start`/`end`) whenever a cut needs to span "all of
+ * these words": a container's own boundary can be looser than its actual
+ * words (e.g. transcribe.ts tolerates a word ending up to 50ms past its
+ * segment's `end`), so cutting the container's boundary directly can leave
+ * a sliver of the last word's footage surviving past the cut -- visible as
+ * a brief flash in both the preview and the export, since both read the
+ * same stored cut boundary.
+ */
+export function wordSpanBounds(
+  words: { start: number; end: number }[],
+  fallback: { start: number; end: number }
+): { start: number; end: number } {
+  if (words.length === 0) return fallback;
+  return { start: words[0].start, end: words[words.length - 1].end };
+}
+
 /** Merge overlapping/adjacent cut ranges and sort by start time. */
 function mergeCuts(cuts: CutOperation[]): { start: number; end: number }[] {
   const sorted = [...cuts]
