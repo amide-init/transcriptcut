@@ -12,6 +12,14 @@ import {
 } from "@/lib/video/logo";
 import type { VideoProperties } from "@/types/video-properties";
 
+/**
+ * How much of each cut is smoothed with a crossfade instead of a hard
+ * splice. Blends the existing tail of the segment before the cut into the
+ * existing head of the segment after it -- no footage from the removed
+ * region itself is used, so it stays truthful to what survived the edit.
+ */
+const CUT_CROSSFADE_SECONDS = 0.2;
+
 /** Percent of frame width/height, not raw pixels -- see lib/video/logo.ts. */
 function clampPaddingPercent(v: number): number {
   return Math.min(LOGO_PADDING_MAX_PERCENT, Math.max(LOGO_PADDING_MIN_PERCENT, v));
@@ -130,8 +138,41 @@ export function buildRenderArgs(args: {
     filterChains.push(`[0:a]atrim=start=${start}:end=${end},asetpts=PTS-STARTPTS[a${i}]`);
   });
 
-  const interleaved = playableRanges.map((_, i) => `[v${i}][a${i}]`).join("");
-  filterChains.push(`${interleaved}concat=n=${playableRanges.length}:v=1:a=1[outv][outa]`);
+  if (playableRanges.length === 1) {
+    filterChains.push(`[v0][a0]concat=n=1:v=1:a=1[outv][outa]`);
+  } else {
+    // Chain xfade/acrossfade pairwise across every cut instead of a plain
+    // concat. xfade's offset is where the transition starts inside the
+    // *combined-so-far* stream, so it has to be tracked cumulatively as
+    // each pair is joined (this is the standard idiom for chaining more
+    // than one xfade) -- verified against a real ffmpeg render, not just
+    // the filter's documented options, since offset math like this is easy
+    // to get subtly wrong. Each individual crossfade is clamped to at most
+    // half of either adjacent segment's own (pre-join) length, so a short
+    // surviving sliver between two nearby cuts can't make the transition
+    // eat more than that sliver.
+    let videoLabel = "v0";
+    let audioLabel = "a0";
+    let cumulativeDuration = playableRanges[0].end - playableRanges[0].start;
+    let previousSegmentDuration = cumulativeDuration;
+    for (let i = 1; i < playableRanges.length; i++) {
+      const segmentDuration = playableRanges[i].end - playableRanges[i].start;
+      const crossfade = Math.min(CUT_CROSSFADE_SECONDS, previousSegmentDuration / 2, segmentDuration / 2);
+      const offset = (cumulativeDuration - crossfade).toFixed(3);
+      const duration = crossfade.toFixed(3);
+      const isLast = i === playableRanges.length - 1;
+      const nextVideoLabel = isLast ? "outv" : `vx${i}`;
+      const nextAudioLabel = isLast ? "outa" : `ax${i}`;
+      filterChains.push(
+        `[${videoLabel}][v${i}]xfade=transition=fade:duration=${duration}:offset=${offset}[${nextVideoLabel}]`
+      );
+      filterChains.push(`[${audioLabel}][a${i}]acrossfade=d=${duration}[${nextAudioLabel}]`);
+      videoLabel = nextVideoLabel;
+      audioLabel = nextAudioLabel;
+      cumulativeDuration = cumulativeDuration + segmentDuration - crossfade;
+      previousSegmentDuration = segmentDuration;
+    }
+  }
 
   let videoOutLabel = "[outv]";
   const presetFilter = getFfmpegFilter(filterId);

@@ -57,7 +57,7 @@ describe("buildRenderArgs: basic structure", () => {
     expect(filterComplex).toContain("[v0][a0]concat=n=1:v=1:a=1[outv][outa]");
   });
 
-  it("trims and concats multiple playable ranges in order", () => {
+  it("trims multiple playable ranges and crossfades across the cut between them", () => {
     const argv = buildRenderArgs({
       ...baseArgs,
       playableRanges: [
@@ -68,7 +68,42 @@ describe("buildRenderArgs: basic structure", () => {
     const filterComplex = argv[argv.indexOf("-filter_complex") + 1];
     expect(filterComplex).toContain("[0:v]trim=start=0.000:end=3.000,setpts=PTS-STARTPTS[v0]");
     expect(filterComplex).toContain("[0:v]trim=start=5.000:end=8.000,setpts=PTS-STARTPTS[v1]");
-    expect(filterComplex).toContain("[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa]");
+    // Both 3s segments comfortably fit the default 0.2s crossfade: offset is
+    // the first segment's own length (3.0) minus that 0.2s.
+    expect(filterComplex).toContain("[v0][v1]xfade=transition=fade:duration=0.200:offset=2.800[outv]");
+    expect(filterComplex).toContain("[a0][a1]acrossfade=d=0.200[outa]");
+  });
+
+  it("chains xfade/acrossfade across more than one cut, tracking cumulative offset", () => {
+    const argv = buildRenderArgs({
+      ...baseArgs,
+      playableRanges: [
+        { start: 0, end: 3 },
+        { start: 5, end: 8 },
+        { start: 10, end: 13 },
+      ],
+    });
+    const filterComplex = argv[argv.indexOf("-filter_complex") + 1];
+    // First join: offset 3.0-0.2=2.8, combined length becomes 3+3-0.2=5.8.
+    expect(filterComplex).toContain("[v0][v1]xfade=transition=fade:duration=0.200:offset=2.800[vx1]");
+    expect(filterComplex).toContain("[a0][a1]acrossfade=d=0.200[ax1]");
+    // Second join starts from that combined 5.8s stream: offset=5.8-0.2=5.6.
+    expect(filterComplex).toContain("[vx1][v2]xfade=transition=fade:duration=0.200:offset=5.600[outv]");
+    expect(filterComplex).toContain("[ax1][a2]acrossfade=d=0.200[outa]");
+  });
+
+  it("clamps the crossfade well below the default when a segment is very short", () => {
+    const argv = buildRenderArgs({
+      ...baseArgs,
+      playableRanges: [
+        { start: 0, end: 0.1 },
+        { start: 1, end: 6 },
+      ],
+    });
+    const filterComplex = argv[argv.indexOf("-filter_complex") + 1];
+    // First segment is 0.1s -- half of it (0.05) is below the 0.2s default,
+    // so the crossfade shrinks to 0.05 instead of overrunning the segment.
+    expect(filterComplex).toContain("duration=0.050:offset=0.050");
   });
 
   it("does not add a second -i or overlay when no logo is set", () => {
