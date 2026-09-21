@@ -82,6 +82,7 @@ export async function runRenderJob(
       logoPosition: logoAsset ? toLogoPosition(project.logoPosition) : undefined,
       logoPaddingX: logoAsset ? project.logoPaddingX : undefined,
       logoPaddingY: logoAsset ? project.logoPaddingY : undefined,
+      logoOpacity: logoAsset ? project.logoOpacity : undefined,
     });
     await runFfmpeg(args);
 

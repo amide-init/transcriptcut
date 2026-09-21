@@ -9,6 +9,10 @@ function clampPadding(v: number): number {
   return Math.min(200, Math.max(0, Math.round(v)));
 }
 
+function clampOpacity(v: number): number {
+  return Math.min(100, Math.max(0, Math.round(v)));
+}
+
 /**
  * Escapes a file path for use as the subtitles filter's filename option.
  * The filtergraph parser uses ':' as an option separator and '\' as its
@@ -69,6 +73,8 @@ export function buildRenderArgs(args: {
   logoPosition?: LogoPosition;
   logoPaddingX?: number;
   logoPaddingY?: number;
+  /** 0-100, defaults to fully opaque. */
+  logoOpacity?: number;
 }): string[] {
   const {
     inputPath,
@@ -82,6 +88,7 @@ export function buildRenderArgs(args: {
     logoPosition,
     logoPaddingX,
     logoPaddingY,
+    logoOpacity,
   } = args;
 
   if (playableRanges.length === 0) {
@@ -134,7 +141,12 @@ export function buildRenderArgs(args: {
       clampPadding(logoPaddingX ?? 0),
       clampPadding(logoPaddingY ?? 0)
     );
-    filterChains.push(`${videoOutLabel}[1:v]overlay=x=${x}:y=${y}[logoed]`);
+    // overlay= has no opacity option of its own -- premultiply the logo
+    // input's alpha channel first so a partial-opacity watermark blends
+    // instead of fully replacing the pixels underneath it.
+    const opacityFraction = (clampOpacity(logoOpacity ?? 100) / 100).toFixed(3);
+    filterChains.push(`[1:v]format=rgba,colorchannelmixer=aa=${opacityFraction}[logosrc]`);
+    filterChains.push(`${videoOutLabel}[logosrc]overlay=x=${x}:y=${y}[logoed]`);
     videoOutLabel = "[logoed]";
   }
 

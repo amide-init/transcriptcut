@@ -26,6 +26,8 @@ model Project {
   logoPosition String @default("bottom-right")
   logoPaddingX Int    @default(16)
   logoPaddingY Int    @default(16)
+  /// 0-100
+  logoOpacity  Int    @default(100)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

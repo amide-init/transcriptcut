@@ -10,6 +10,7 @@ export type LogoPosition = (typeof LOGO_POSITIONS)[number];
 
 export const DEFAULT_LOGO_POSITION: LogoPosition = "bottom-right";
 export const DEFAULT_LOGO_PADDING = 16;
+export const DEFAULT_LOGO_OPACITY = 100;
 
 /** Narrows the raw `Project.logoPosition` DB string (always app-written, but typed as `string` by Prisma) to `LogoPosition`. */
 export function toLogoPosition(value: string): LogoPosition {
@@ -18,15 +19,16 @@ export function toLogoPosition(value: string): LogoPosition {
     : DEFAULT_LOGO_POSITION;
 }
 
-/** CSS `top`/`bottom`/`left`/`right` (px) for absolutely positioning the logo over the video. */
+/** CSS `top`/`bottom`/`left`/`right` (px) + `opacity` for absolutely positioning the logo over the video. */
 export function logoPositionToCss(
   position: LogoPosition,
   paddingX: number,
-  paddingY: number
+  paddingY: number,
+  opacity: number = DEFAULT_LOGO_OPACITY
 ): CSSProperties {
   const vertical = position.startsWith("top") ? { top: paddingY } : { bottom: paddingY };
   const horizontal = position.endsWith("left") ? { left: paddingX } : { right: paddingX };
-  return { position: "absolute", ...vertical, ...horizontal };
+  return { position: "absolute", ...vertical, ...horizontal, opacity: opacity / 100 };
 }
 
 /**
