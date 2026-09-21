@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { Home } from "lucide-react";
+import { FolderKanban, Home } from "lucide-react";
 import { VideoPlayer } from "@/components/video-player/VideoPlayer";
 import { TranscriptPanel } from "@/components/transcript/TranscriptPanel";
 import { Timeline } from "@/components/timeline/Timeline";
 import { EditorSidebar } from "@/components/editor/EditorSidebar";
 import { ExportButton } from "@/components/editor/ExportButton";
 import { ProjectNameField } from "@/components/editor/ProjectNameField";
+import { Button } from "@/components/ui/button";
 
 export function EditorLayout({ videoUrl }: { videoUrl: string }) {
   return (
@@ -21,6 +22,12 @@ export function EditorLayout({ videoUrl }: { videoUrl: string }) {
           >
             <Home className="size-4" />
           </Link>
+          <Button type="button" variant="outline" size="sm" asChild>
+            <Link href="/">
+              <FolderKanban className="size-3.5" />
+              Projects
+            </Link>
+          </Button>
           <ProjectNameField />
         </div>
         <ExportButton />
