@@ -5,13 +5,16 @@ import { buildForceStyle, type CaptionStyle } from "@/lib/captions/style";
 import {
   LOGO_MAX_HEIGHT_FRACTION,
   LOGO_MAX_WIDTH_FRACTION,
+  LOGO_PADDING_MAX_PERCENT,
+  LOGO_PADDING_MIN_PERCENT,
   logoPositionToOverlayXY,
   type LogoPosition,
 } from "@/lib/video/logo";
 import type { VideoProperties } from "@/types/video-properties";
 
-function clampPadding(v: number): number {
-  return Math.min(200, Math.max(0, Math.round(v)));
+/** Percent of frame width/height, not raw pixels -- see lib/video/logo.ts. */
+function clampPaddingPercent(v: number): number {
+  return Math.min(LOGO_PADDING_MAX_PERCENT, Math.max(LOGO_PADDING_MIN_PERCENT, v));
 }
 
 function clampOpacity(v: number): number {
@@ -76,6 +79,7 @@ export function buildRenderArgs(args: {
   /** Absolute path to a logo/watermark image to overlay, if one is set. */
   logoPath?: string;
   logoPosition?: LogoPosition;
+  /** Percent of frame width/height, not raw pixels -- see lib/video/logo.ts. */
   logoPaddingX?: number;
   logoPaddingY?: number;
   /** 0-100, defaults to fully opaque. */
@@ -157,8 +161,8 @@ export function buildRenderArgs(args: {
     }
     const { x, y } = logoPositionToOverlayXY(
       logoPosition,
-      clampPadding(logoPaddingX ?? 0),
-      clampPadding(logoPaddingY ?? 0)
+      clampPaddingPercent(logoPaddingX ?? 0),
+      clampPaddingPercent(logoPaddingY ?? 0)
     );
     // overlay= has no opacity option of its own -- premultiply the logo
     // input's alpha channel first so a partial-opacity watermark blends

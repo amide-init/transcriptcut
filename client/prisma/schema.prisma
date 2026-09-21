@@ -24,8 +24,9 @@ model Project {
 
   /// "top-left" | "top-right" | "bottom-left" | "bottom-right" -- see src/lib/video/logo.ts
   logoPosition String @default("bottom-right")
-  logoPaddingX Int    @default(16)
-  logoPaddingY Int    @default(16)
+  /// Percent of frame width/height (0-20), not raw pixels -- see src/lib/video/logo.ts.
+  logoPaddingX Float  @default(3)
+  logoPaddingY Float  @default(3)
   /// 0-100
   logoOpacity  Int    @default(100)
 

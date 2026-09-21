@@ -9,8 +9,22 @@ export const LOGO_POSITIONS = ["top-left", "top-right", "bottom-left", "bottom-r
 export type LogoPosition = (typeof LOGO_POSITIONS)[number];
 
 export const DEFAULT_LOGO_POSITION: LogoPosition = "bottom-right";
-export const DEFAULT_LOGO_PADDING = 16;
 export const DEFAULT_LOGO_OPACITY = 100;
+
+/**
+ * Logo inset from the edge, as a percent of the frame's own width/height
+ * (paddingX relative to frame width, paddingY relative to frame height) --
+ * NOT raw pixels. A pixel value would mean something different in the
+ * preview (CSS px against the on-screen, often-scaled-down player element)
+ * than in the export (ffmpeg px against the video's native resolution), so
+ * both logoPositionToCss and logoPositionToOverlayXY below take this same
+ * frame-relative percent and let their own renderer (CSS %, ffmpeg's W/H
+ * filtergraph variables) do the pixel conversion in its own coordinate
+ * space -- see GitHub issue #21.
+ */
+export const DEFAULT_LOGO_PADDING_PERCENT = 3;
+export const LOGO_PADDING_MIN_PERCENT = 0;
+export const LOGO_PADDING_MAX_PERCENT = 20;
 
 /**
  * Max logo size relative to the video frame, preserving aspect ratio and
@@ -29,29 +43,46 @@ export function toLogoPosition(value: string): LogoPosition {
     : DEFAULT_LOGO_POSITION;
 }
 
-/** CSS `top`/`bottom`/`left`/`right` (px) + `opacity` for absolutely positioning the logo over the video. */
+/**
+ * CSS `top`/`bottom`/`left`/`right` (as `%` of the containing box, not px)
+ * + `opacity` for absolutely positioning the logo over the video. `%` on an
+ * absolutely-positioned element is already relative to its containing
+ * block's own size, so this needs no measurement of the on-screen video
+ * element -- the browser does the frame-relative math for free, the same
+ * way ffmpeg's W/H variables do in logoPositionToOverlayXY below.
+ */
 export function logoPositionToCss(
   position: LogoPosition,
-  paddingX: number,
-  paddingY: number,
+  paddingXPercent: number,
+  paddingYPercent: number,
   opacity: number = DEFAULT_LOGO_OPACITY
 ): CSSProperties {
-  const vertical = position.startsWith("top") ? { top: paddingY } : { bottom: paddingY };
-  const horizontal = position.endsWith("left") ? { left: paddingX } : { right: paddingX };
+  const vertical = position.startsWith("top")
+    ? { top: `${paddingYPercent}%` }
+    : { bottom: `${paddingYPercent}%` };
+  const horizontal = position.endsWith("left")
+    ? { left: `${paddingXPercent}%` }
+    : { right: `${paddingXPercent}%` };
   return { position: "absolute", ...vertical, ...horizontal, opacity: opacity / 100 };
 }
 
 /**
- * ffmpeg `overlay` filter x/y expressions for the same anchor + padding,
- * using the standard W/H (base video) and w/h (overlay) filtergraph
- * variables so the position matches at any resolution.
+ * ffmpeg `overlay` filter x/y expressions for the same anchor + frame-
+ * relative padding percent, using the standard W/H (base video) and w/h
+ * (overlay) filtergraph variables so the position matches at any
+ * resolution -- W*fraction is ffmpeg's own equivalent of CSS's `%`, so no
+ * probed pixel dimensions are needed here (unlike the logo *size* fix,
+ * where the scale filter has no access to the base video's W/H and needs
+ * real numbers instead).
  */
 export function logoPositionToOverlayXY(
   position: LogoPosition,
-  paddingX: number,
-  paddingY: number
+  paddingXPercent: number,
+  paddingYPercent: number
 ): { x: string; y: string } {
-  const x = position.endsWith("left") ? `${paddingX}` : `W-w-${paddingX}`;
-  const y = position.startsWith("top") ? `${paddingY}` : `H-h-${paddingY}`;
+  const fracX = (paddingXPercent / 100).toFixed(4);
+  const fracY = (paddingYPercent / 100).toFixed(4);
+  const x = position.endsWith("left") ? `(W*${fracX})` : `(W-w-W*${fracX})`;
+  const y = position.startsWith("top") ? `(H*${fracY})` : `(H-h-H*${fracY})`;
   return { x, y };
 }
