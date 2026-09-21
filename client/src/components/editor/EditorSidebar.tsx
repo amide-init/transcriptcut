@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
-import { Captions, FolderKanban, ImagePlus, SlidersHorizontal, Sliders, Wand2 } from "lucide-react";
+import { Captions, ImagePlus, SlidersHorizontal, Sliders, Wand2 } from "lucide-react";
 import { AiToolsPanel } from "@/components/editor/AiToolsPanel";
 import { FiltersPanel } from "@/components/editor/FiltersPanel";
 import { PropertiesPanel } from "@/components/editor/PropertiesPanel";
@@ -63,14 +62,6 @@ export function EditorSidebar() {
             </button>
           );
         })}
-        <div className="my-1 h-px w-8 bg-border" />
-        <Link
-          href="/"
-          className="flex w-[84px] flex-col items-center gap-1 rounded-md py-2 text-center text-[0.7rem] leading-tight text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        >
-          <FolderKanban className="size-4" />
-          Projects
-        </Link>
       </div>
     </div>
   );
