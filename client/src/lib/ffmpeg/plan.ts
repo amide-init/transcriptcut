@@ -17,8 +17,18 @@ import type { VideoProperties } from "@/types/video-properties";
  * splice. Blends the existing tail of the segment before the cut into the
  * existing head of the segment after it -- no footage from the removed
  * region itself is used, so it stays truthful to what survived the edit.
+ *
+ * Deliberately short: this is footage of people talking, not music, so a
+ * long crossfade means two different words are audibly playing on top of
+ * each other for its whole duration (confirmed: 0.2s was long enough for
+ * that overlap to be clearly audible as doubled/muddled speech). 30ms is
+ * the kind of duration audio editors use for a "declick" crossfade -- just
+ * enough to smooth the raw waveform-amplitude discontinuity a hard splice
+ * can leave at the join (which is what actually causes an audible click/
+ * pop, not the cut itself), short enough that two overlapping words aren't
+ * perceptible as anything other than a clean cut.
  */
-const CUT_CROSSFADE_SECONDS = 0.2;
+const CUT_CROSSFADE_SECONDS = 0.03;
 
 /** Percent of frame width/height, not raw pixels -- see lib/video/logo.ts. */
 function clampPaddingPercent(v: number): number {
