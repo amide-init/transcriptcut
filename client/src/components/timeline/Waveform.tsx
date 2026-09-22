@@ -51,10 +51,25 @@ export function Waveform({
 
     const barWidth = width / buckets;
     const mid = height / 2;
-    ctx.fillStyle = "rgba(255, 255, 255, 0.45)";
+    // A soft vertical fade (bright accent blue at the peak tips, dimmer
+    // toward the midline) reads as a waveform rather than a flat blob of
+    // color -- matches the amber/blue/red interaction-role palette in
+    // globals.css (--accent), not an arbitrary new color.
+    const gradient = ctx.createLinearGradient(0, 0, 0, height);
+    gradient.addColorStop(0, "rgba(129, 169, 250, 0.95)");
+    gradient.addColorStop(0.5, "rgba(91, 141, 239, 0.9)");
+    gradient.addColorStop(1, "rgba(129, 169, 250, 0.95)");
+    ctx.fillStyle = gradient;
+
+    const radius = Math.min(1.5, barWidth / 2);
     peaks.forEach((peak, i) => {
-      const barHeight = Math.max(1, peak * height);
-      ctx.fillRect(i * barWidth, mid - barHeight / 2, Math.max(1, barWidth - 1), barHeight);
+      const barHeight = Math.max(2, peak * height);
+      const x = i * barWidth;
+      const y = mid - barHeight / 2;
+      const w = Math.max(1, barWidth - 1);
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, barHeight, radius);
+      ctx.fill();
     });
   }, [buffer, start, end, pxPerSecond]);
 

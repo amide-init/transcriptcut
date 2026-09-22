@@ -154,18 +154,24 @@ export function Timeline() {
           <div
             ref={trackRef}
             onClick={handleTrackClick}
-            className="relative flex h-24 w-full cursor-pointer overflow-hidden rounded-md bg-muted"
+            className="relative flex h-24 w-full cursor-pointer overflow-hidden rounded-md border border-border bg-muted p-1.5"
           >
             {playableRanges.map((r, i) => (
               <div
                 key={i}
                 style={{ width: `${((r.end - r.start) / editedDuration) * 100}%` }}
-                className="flex h-full overflow-hidden border-r border-background bg-secondary last:border-r-0"
+                className="flex h-full overflow-hidden rounded-sm border-r border-background bg-secondary last:border-r-0"
                 title={`${r.start.toFixed(1)}s – ${r.end.toFixed(1)}s`}
               >
                 {thumbnails[i]?.map((src, k) => (
                   // eslint-disable-next-line @next/next/no-img-element -- locally generated data URL, not a static asset
-                  <img key={k} src={src} alt="" className="h-full flex-1 object-cover" draggable={false} />
+                  <img
+                    key={k}
+                    src={src}
+                    alt=""
+                    className="h-full flex-1 border-r border-background/70 object-cover last:border-r-0"
+                    draggable={false}
+                  />
                 ))}
               </div>
             ))}
@@ -187,7 +193,7 @@ export function Timeline() {
             />
           </div>
           {audioBuffer && editedDuration > 0 && (
-            <div className="flex h-12 w-full overflow-hidden rounded-md bg-muted">
+            <div className="flex h-12 w-full overflow-hidden rounded-md border border-border bg-muted p-1.5">
               {playableRanges.map((r, i) => (
                 <div
                   key={i}
