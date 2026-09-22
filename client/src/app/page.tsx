@@ -8,7 +8,14 @@ import type { Project } from "@/types/project";
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const rows = await prisma.project.findMany({ orderBy: { updatedAt: "desc" } });
+  const rows = await prisma.project.findMany({
+    orderBy: { updatedAt: "desc" },
+    include: {
+      assets: { select: { kind: true } },
+      transcript: { select: { id: true } },
+      _count: { select: { editOperations: true } },
+    },
+  });
 
   const projects: Project[] = rows.map((p) => ({
     id: p.id,
@@ -17,6 +24,9 @@ export default async function Home() {
     filterId: p.filterId,
     createdAt: p.createdAt.toISOString(),
     updatedAt: p.updatedAt.toISOString(),
+    hasVideo: p.assets.some((a) => a.kind === "original"),
+    hasTranscript: p.transcript !== null,
+    cutCount: p._count.editOperations,
   }));
 
   return <Dashboard initialProjects={projects} />;

@@ -5,4 +5,7 @@ export type Project = {
   filterId: string;
   createdAt: string;
   updatedAt: string;
+  hasVideo: boolean;
+  hasTranscript: boolean;
+  cutCount: number;
 };
