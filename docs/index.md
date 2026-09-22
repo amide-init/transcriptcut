@@ -9,7 +9,7 @@ hero:
     matching cut lands on the timeline. No cloud account, no bill — just
     npm install and an LLM API key for transcription.
   image:
-    src: /screenshots/editor-overview.png
+    src: /screenshots/hero.png
     alt: transcriptcut editor showing video, transcript, and timeline
   actions:
     - theme: brand
@@ -80,11 +80,51 @@ works end to end.
 
 <div class="vp-doc" style="margin-top: 2rem;">
 
-## Quick look
+## Filler-word detection, in the same view
 
 </div>
 
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1rem;">
-  <a href="/transcriptcut/screenshots"><img src="/screenshots/dashboard.png" alt="Project dashboard" style="border-radius:8px;border:1px solid var(--vp-c-divider);"/></a>
-  <a href="/transcriptcut/screenshots"><img src="/screenshots/editor-overview.png" alt="Editor with video, transcript, and timeline" style="border-radius:8px;border:1px solid var(--vp-c-divider);"/></a>
-</div>
+<a href="/transcriptcut/screenshots" style="display:block;margin-top:1rem;">
+  <img src="/screenshots/ai-tools-panel.png" alt="AI tools panel with Find filler words and Find long pauses, flagged words underlined in the transcript" style="width:100%;border-radius:12px;border:1px solid var(--vp-c-divider);box-shadow:var(--vp-shadow-3);"/>
+</a>
+
+<p style="margin-top:0.75rem;"><a href="/screenshots">See more screenshots →</a></p>
+
+<style>
+/* The default hero image slot is sized/masked for a small square logo.
+   transcriptcut's hero image is a real UI screenshot, so give it room
+   and drop the circular glow behind it. */
+.VPHero .image {
+  /* Default negative margins are calibrated to the old fixed-height
+     logo slot; with a full-width screenshot (much taller) they pull
+     the image up into the heading text instead. */
+  margin: 24px 0 0 !important;
+}
+@media (min-width: 960px) {
+  .VPHero .image {
+    margin: 0 0 0 24px !important;
+  }
+}
+.VPHero .image-container {
+  width: 100% !important;
+  max-width: 720px !important;
+  height: auto !important;
+  transform: none !important;
+}
+.VPHero .image-bg {
+  display: none !important;
+}
+.VPHero .image-src {
+  position: static !important;
+  top: auto !important;
+  left: auto !important;
+  transform: none !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  max-height: none !important;
+  height: auto !important;
+  border-radius: 12px;
+  border: 1px solid var(--vp-c-divider);
+  box-shadow: var(--vp-shadow-3);
+}
+</style>
