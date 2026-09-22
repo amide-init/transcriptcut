@@ -8,6 +8,7 @@ import { Timeline } from "@/components/timeline/Timeline";
 import { EditorSidebar } from "@/components/editor/EditorSidebar";
 import { ExportButton } from "@/components/editor/ExportButton";
 import { ProjectNameField } from "@/components/editor/ProjectNameField";
+import { GithubLink } from "@/components/GithubLink";
 import { usePlayerStore } from "@/stores/player-store";
 
 export function EditorLayout({ videoUrl }: { videoUrl: string }) {
@@ -39,7 +40,10 @@ export function EditorLayout({ videoUrl }: { videoUrl: string }) {
           <div className="h-6 w-px bg-border" />
           <ProjectNameField />
         </div>
-        <ExportButton />
+        <div className="flex items-center gap-2">
+          <GithubLink />
+          <ExportButton />
+        </div>
       </nav>
 
       <div className="flex min-h-0 flex-1 gap-3">

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AudioLines, FolderPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ProjectRow } from "@/components/dashboard/ProjectRow";
+import { GithubLink } from "@/components/GithubLink";
 import type { Project } from "@/types/project";
 
 export function Dashboard({ initialProjects }: { initialProjects: Project[] }) {
@@ -20,14 +21,17 @@ export function Dashboard({ initialProjects }: { initialProjects: Project[] }) {
 
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-5xl flex-col px-6 py-10">
-      <div className="mb-10 flex items-center gap-2.5">
-        <span className="flex size-8 items-center justify-center rounded-md bg-primary/15 text-primary">
-          <AudioLines className="size-4" />
-        </span>
-        <div className="flex flex-col leading-none">
-          <span className="text-[0.85rem] font-semibold">AI Video Editor</span>
-          <span className="text-[0.7rem] text-muted-foreground">Edit video like you edit text</span>
+      <div className="mb-10 flex items-center justify-between gap-2.5">
+        <div className="flex items-center gap-2.5">
+          <span className="flex size-8 items-center justify-center rounded-md bg-primary/15 text-primary">
+            <AudioLines className="size-4" />
+          </span>
+          <div className="flex flex-col leading-none">
+            <span className="text-[0.85rem] font-semibold">AI Video Editor</span>
+            <span className="text-[0.7rem] text-muted-foreground">Edit video like you edit text</span>
+          </div>
         </div>
+        <GithubLink />
       </div>
 
       <header className="mb-6 flex items-end justify-between gap-4">
