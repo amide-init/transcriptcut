@@ -155,7 +155,7 @@ export function TranscriptPanel() {
           <option key={name} value={name} />
         ))}
       </datalist>
-      <div className="flex-1 space-y-4 overflow-y-auto pr-1 text-[1.0625rem] leading-[1.7]">
+      <div className="flex-1 space-y-4 overflow-y-auto pr-1 text-[0.875rem] leading-[1.6]">
         {transcript.segments.map((segment, i) => {
           const previousSpeaker = transcript.segments[i - 1]?.speaker;
           // Unset is never "the same speaker" as another unset segment --
