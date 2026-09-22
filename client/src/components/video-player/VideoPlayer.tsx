@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useId, useRef, type CSSProperties } from "react";
-import { Pause, Play } from "lucide-react";
+import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
+import { Maximize, Minimize, Pause, Play, Volume2, VolumeX } from "lucide-react";
 import { usePlayerStore } from "@/stores/player-store";
 import { useTimelineStore } from "@/stores/timeline-store";
 import { useTranscriptStore } from "@/stores/transcript-store";
@@ -41,6 +41,9 @@ const CAPTION_VERTICAL_STYLE: Record<CaptionPosition, CSSProperties> = {
 export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const scrubberRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [muted, setMuted] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const duration = usePlayerStore((s) => s.duration);
   const currentTime = usePlayerStore((s) => s.currentTime);
@@ -147,6 +150,21 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
     return () => setVideoElement(null);
   }, [setVideoElement]);
 
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.muted = muted;
+  }, [muted]);
+
+  useEffect(() => {
+    const onFullscreenChange = () => setIsFullscreen(document.fullscreenElement === containerRef.current);
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else containerRef.current?.requestFullscreen();
+  };
+
   // Frame-accurate cut-skip: the native `timeupdate` event (used as the
   // fallback in handleTimeUpdate below) isn't guaranteed to fire every
   // rendered frame, so a frame or two from inside a cut region can paint
@@ -231,7 +249,7 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
   };
 
   return (
-    <div className="flex h-full w-full flex-col bg-black">
+    <div ref={containerRef} className="flex h-full w-full flex-col bg-black">
       {svgFilterNeeded && (
         <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden="true">
           <defs>
@@ -330,9 +348,6 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
         >
           {isPlaying ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
         </button>
-        <span className="font-mono text-xs tabular-nums text-white/70">
-          {formatTimecode(editedCurrentTime)} / {formatTimecode(editedDuration)}
-        </span>
         <div
           ref={scrubberRef}
           onClick={handleScrubberClick}
@@ -343,6 +358,23 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
             style={{ left: `${playheadPosition}%` }}
           />
         </div>
+        <span className="font-mono text-xs tabular-nums text-white/70">
+          {formatTimecode(editedCurrentTime)} / {formatTimecode(editedDuration)}
+        </span>
+        <button
+          type="button"
+          onClick={() => setMuted((m) => !m)}
+          className="flex size-6 shrink-0 items-center justify-center rounded text-white hover:bg-white/10"
+        >
+          {muted ? <VolumeX className="size-3.5" /> : <Volume2 className="size-3.5" />}
+        </button>
+        <button
+          type="button"
+          onClick={toggleFullscreen}
+          className="flex size-6 shrink-0 items-center justify-center rounded text-white hover:bg-white/10"
+        >
+          {isFullscreen ? <Minimize className="size-3.5" /> : <Maximize className="size-3.5" />}
+        </button>
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Download, Upload } from "lucide-react";
 import { useProjectStore } from "@/stores/project-store";
 import { useCaptionStyleStore } from "@/stores/caption-style-store";
 import { Button } from "@/components/ui/button";
@@ -91,6 +92,7 @@ export function ExportButton() {
         <>
           <Button asChild size="sm">
             <a href={downloadUrl} download>
+              <Download className="size-3.5" />
               Download
             </a>
           </Button>
@@ -100,6 +102,7 @@ export function ExportButton() {
         </>
       ) : (
         <Button size="sm" onClick={handleExport} disabled={busy}>
+          <Upload className="size-3.5" />
           {status === "queued" ? "Queued…" : status === "processing" ? "Rendering…" : "Export"}
         </Button>
       )}

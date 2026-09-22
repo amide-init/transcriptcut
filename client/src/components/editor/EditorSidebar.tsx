@@ -8,60 +8,48 @@ import { PropertiesPanel } from "@/components/editor/PropertiesPanel";
 import { ElementsPanel } from "@/components/editor/ElementsPanel";
 import { CaptionsPanel } from "@/components/editor/CaptionsPanel";
 
-type PanelId = "ai" | "filters" | "properties" | "elements" | "captions";
+type PanelId = "captions" | "ai" | "filters" | "properties" | "elements";
 
-const RAIL_ITEMS: { id: PanelId; label: string; icon: typeof Wand2 }[] = [
+const TABS: { id: PanelId; label: string; icon: typeof Wand2 }[] = [
+  { id: "captions", label: "Captions", icon: Captions },
   { id: "ai", label: "AI tools", icon: Wand2 },
   { id: "filters", label: "Filters", icon: SlidersHorizontal },
-  { id: "properties", label: "Properties", icon: Sliders },
   { id: "elements", label: "Elements", icon: ImagePlus },
-  { id: "captions", label: "Captions", icon: Captions },
+  { id: "properties", label: "Settings", icon: Sliders },
 ];
 
-/** The editor's right sidebar: a fixed 100px icon rail, plus a 250px panel that opens to its left. */
+/** The editor's right sidebar: one card with a horizontal tab row up top and the active tool's panel below. */
 export function EditorSidebar() {
-  const [activePanel, setActivePanel] = useState<PanelId | null>(null);
-
-  const toggle = (id: PanelId) => setActivePanel((current) => (current === id ? null : id));
-
-  const activeItem = RAIL_ITEMS.find((item) => item.id === activePanel);
+  const [activePanel, setActivePanel] = useState<PanelId>("captions");
 
   return (
-    <div className="flex h-full shrink-0 gap-3">
-      {activeItem && (
-        <div className="flex w-[250px] flex-col overflow-hidden rounded-lg border border-border bg-card">
-          <div className="flex h-9 shrink-0 items-center border-b border-border px-3 text-[0.8rem] font-medium text-foreground">
-            {activeItem.label}
-          </div>
-          <div className="flex-1 overflow-y-auto p-3">
-            {activePanel === "ai" && <AiToolsPanel />}
-            {activePanel === "filters" && <FiltersPanel />}
-            {activePanel === "properties" && <PropertiesPanel />}
-            {activePanel === "elements" && <ElementsPanel />}
-            {activePanel === "captions" && <CaptionsPanel />}
-          </div>
-        </div>
-      )}
-      <div className="flex w-[100px] shrink-0 flex-col items-center gap-1.5 rounded-lg border border-border bg-card py-3">
-        {RAIL_ITEMS.map((item) => {
-          const Icon = item.icon;
-          const selected = activePanel === item.id;
+    <div className="flex h-full w-[320px] shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-card">
+      <div className="flex shrink-0 border-b border-border">
+        {TABS.map((tab) => {
+          const Icon = tab.icon;
+          const selected = activePanel === tab.id;
           return (
             <button
-              key={item.id}
+              key={tab.id}
               type="button"
-              onClick={() => toggle(item.id)}
-              className={`flex w-[84px] flex-col items-center gap-1 rounded-md py-2 text-center text-[0.7rem] leading-tight transition-colors ${
-                selected
-                  ? "bg-primary/15 text-primary"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              onClick={() => setActivePanel(tab.id)}
+              className={`relative flex flex-1 flex-col items-center gap-1 py-2.5 text-center text-[0.65rem] leading-tight transition-colors ${
+                selected ? "text-primary" : "text-muted-foreground hover:text-foreground"
               }`}
             >
               <Icon className="size-4" />
-              {item.label}
+              {tab.label}
+              {selected && <span className="absolute inset-x-3 -bottom-px h-0.5 rounded-full bg-primary" />}
             </button>
           );
         })}
+      </div>
+      <div className="flex-1 overflow-y-auto p-3">
+        {activePanel === "captions" && <CaptionsPanel />}
+        {activePanel === "ai" && <AiToolsPanel />}
+        {activePanel === "filters" && <FiltersPanel />}
+        {activePanel === "elements" && <ElementsPanel />}
+        {activePanel === "properties" && <PropertiesPanel />}
       </div>
     </div>
   );

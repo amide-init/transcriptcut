@@ -1,14 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { FolderKanban, Home } from "lucide-react";
+import { AudioLines, ChevronLeft } from "lucide-react";
 import { VideoPlayer } from "@/components/video-player/VideoPlayer";
 import { TranscriptPanel } from "@/components/transcript/TranscriptPanel";
 import { Timeline } from "@/components/timeline/Timeline";
 import { EditorSidebar } from "@/components/editor/EditorSidebar";
 import { ExportButton } from "@/components/editor/ExportButton";
 import { ProjectNameField } from "@/components/editor/ProjectNameField";
-import { Button } from "@/components/ui/button";
 import { usePlayerStore } from "@/stores/player-store";
 
 export function EditorLayout({ videoUrl }: { videoUrl: string }) {
@@ -21,21 +20,23 @@ export function EditorLayout({ videoUrl }: { videoUrl: string }) {
 
   return (
     <div className="flex h-screen flex-col gap-3 p-3">
-      <nav className="flex h-9 shrink-0 items-center justify-between">
+      <nav className="flex h-11 shrink-0 items-center justify-between">
         <div className="flex items-center gap-3">
           <Link
             href="/"
-            className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+            className="group flex items-center gap-2 rounded-md py-1 pr-2 pl-1 hover:bg-muted"
             title="All projects"
           >
-            <Home className="size-4" />
+            <ChevronLeft className="size-3.5 text-muted-foreground group-hover:text-foreground" />
+            <span className="flex size-7 items-center justify-center rounded-md bg-primary/15 text-primary">
+              <AudioLines className="size-4" />
+            </span>
+            <span className="flex flex-col leading-none">
+              <span className="text-[0.8rem] font-semibold text-foreground">AI Video Editor</span>
+              <span className="text-[0.65rem] text-muted-foreground">Edit video like you edit text</span>
+            </span>
           </Link>
-          <Button type="button" variant="outline" size="sm" asChild>
-            <Link href="/">
-              <FolderKanban className="size-3.5" />
-              Projects
-            </Link>
-          </Button>
+          <div className="h-6 w-px bg-border" />
           <ProjectNameField />
         </div>
         <ExportButton />
