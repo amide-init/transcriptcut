@@ -54,7 +54,23 @@ adding real authentication first; see `claude.md` section 18.
 ```text
 claude.md    — product spec
 client/      — Next.js app (editor UI + API routes)
+docs/        — documentation site (VitePress, deployed to GitHub Pages)
 server/      — reserved for future use, not in use yet
+```
+
+## Documentation
+
+The full docs site — getting started, architecture, the editing
+workflow, screenshots, and how to get involved — is published from
+[`docs/`](./docs) via GitHub Pages at
+**https://amide-init.github.io/transcriptcut/**.
+
+To run it locally:
+
+```bash
+cd docs
+pnpm install
+pnpm run dev
 ```
 
 ## Running the client
