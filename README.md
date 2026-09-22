@@ -1,5 +1,9 @@
 # transcriptcut
 
+[![Release](https://img.shields.io/github/v/release/amide-init/transcriptcut)](https://github.com/amide-init/transcriptcut/releases/latest)
+
+![transcriptcut editor: video preview, transcript with word-level cuts, and a frame-thumbnail timeline](docs/public/screenshots/hero.png)
+
 Edit video by editing its transcript, with a few explicit AI-assisted
 actions (filler-word and long-pause removal) layered on top — **not** a
 free-text "ask the AI to edit this" chat bar; an early version of that was
