@@ -9,8 +9,8 @@ actions (filler-word and long-pause removal) layered on top — **not** a
 free-text "ask the AI to edit this" chat bar; an early version of that was
 built and worked, then deliberately removed (see Status below and
 `claude.md` section 3 for why). **Local-first and open source** — runs
-entirely on your machine, no cloud account required. See
-[`claude.md`](./claude.md) for the full product spec and the
+entirely on your machine, no cloud account required. See the
+[docs](https://amide-init.github.io/transcriptcut/) for more, and the
 [issue tracker](https://github.com/amide-init/transcriptcut/issues) for
 current build status.
 
