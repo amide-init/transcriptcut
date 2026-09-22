@@ -99,7 +99,7 @@ export function ElementsPanel() {
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*"
+          accept="image/png,image/jpeg,image/webp,image/gif"
           className="hidden"
           onChange={(e) => {
             const file = e.target.files?.[0];
@@ -116,6 +116,7 @@ export function ElementsPanel() {
         >
           {busy ? "Working…" : logoUrl ? "Replace logo" : "Upload logo"}
         </Button>
+        <p className="text-muted-foreground">PNG, JPG, WEBP, or GIF -- SVG isn&apos;t supported.</p>
 
         {error && <p className="text-destructive">{error}</p>}
       </div>

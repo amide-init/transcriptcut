@@ -6,6 +6,12 @@ export const runtime = "nodejs";
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10MB local upload cap for a logo/watermark image
 
+// Raster formats only -- the logo is fed straight into ffmpeg's filtergraph
+// as an -i input (see lib/ffmpeg/plan.ts), and this build of ffmpeg has no
+// SVG decoder (no librsvg), so an SVG upload previews fine in the browser
+// but fails the export with "no decoder found for: svg".
+const SUPPORTED_LOGO_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+
 function errorResponse(code: string, message: string, status: number) {
   return NextResponse.json({ success: false, error: { code, message } }, { status });
 }
@@ -60,8 +66,12 @@ export async function POST(request: Request, { params }: RouteContext) {
       413
     );
   }
-  if (!file.type.startsWith("image/")) {
-    return errorResponse("INVALID_FILE_TYPE", "Only image files are supported.", 400);
+  if (!SUPPORTED_LOGO_MIME_TYPES.has(file.type)) {
+    return errorResponse(
+      "INVALID_FILE_TYPE",
+      "Only PNG, JPG, WEBP, or GIF images are supported (SVG can't be rendered into the export).",
+      400
+    );
   }
 
   const bytes = new Uint8Array(await file.arrayBuffer());
