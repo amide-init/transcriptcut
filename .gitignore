@@ -17,3 +17,6 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
+
+# staged Tauri backend bundle (built by scripts/prepare-server-bundle.sh)
+/server-bundle
