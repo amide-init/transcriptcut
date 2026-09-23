@@ -1,0 +1,316 @@
+import { describe, expect, it } from "vitest";
+import {
+  computePlayableRanges,
+  cutsOverlapping,
+  editedTimeToSourceTime,
+  getEditedDuration,
+  isCut,
+  isFullyCut,
+  isWordCut,
+  nextPlayableTime,
+  padCutStart,
+  sourceTimeToEditedTime,
+  wordSpanBounds,
+} from "@/lib/timeline/cuts";
+import type { CutOperation } from "@/types/edit-operation";
+import type { PlayableRange } from "@/types/timeline";
+
+function cut(start: number, end: number): CutOperation {
+  return { id: `${start}-${end}`, type: "cut", start, end, createdAt: 0 };
+}
+
+describe("computePlayableRanges", () => {
+  it("returns the whole duration with no cuts", () => {
+    expect(computePlayableRanges(10, [])).toEqual([{ start: 0, end: 10 }]);
+  });
+
+  it("returns nothing for a non-positive duration", () => {
+    expect(computePlayableRanges(0, [])).toEqual([]);
+    expect(computePlayableRanges(-5, [])).toEqual([]);
+  });
+
+  it("subtracts a single interior cut", () => {
+    expect(computePlayableRanges(10, [cut(3, 5)])).toEqual([
+      { start: 0, end: 3 },
+      { start: 5, end: 10 },
+    ]);
+  });
+
+  it("subtracts a cut touching the start", () => {
+    expect(computePlayableRanges(10, [cut(0, 3)])).toEqual([{ start: 3, end: 10 }]);
+  });
+
+  it("subtracts a cut touching the end", () => {
+    expect(computePlayableRanges(10, [cut(7, 10)])).toEqual([{ start: 0, end: 7 }]);
+  });
+
+  it("returns nothing when the whole video is cut", () => {
+    expect(computePlayableRanges(10, [cut(0, 10)])).toEqual([]);
+  });
+
+  it("returns nothing when a cut overruns the duration", () => {
+    expect(computePlayableRanges(10, [cut(0, 999)])).toEqual([]);
+  });
+
+  it("merges overlapping cuts", () => {
+    expect(computePlayableRanges(10, [cut(2, 5), cut(4, 7)])).toEqual([
+      { start: 0, end: 2 },
+      { start: 7, end: 10 },
+    ]);
+  });
+
+  it("merges adjacent (touching) cuts", () => {
+    expect(computePlayableRanges(10, [cut(2, 5), cut(5, 7)])).toEqual([
+      { start: 0, end: 2 },
+      { start: 7, end: 10 },
+    ]);
+  });
+
+  it("handles cuts given out of order", () => {
+    expect(computePlayableRanges(10, [cut(7, 9), cut(1, 2)])).toEqual([
+      { start: 0, end: 1 },
+      { start: 2, end: 7 },
+      { start: 9, end: 10 },
+    ]);
+  });
+
+  it("drops a zero-length surviving range between back-to-back cuts", () => {
+    // Cuts [1,3) and [3,3.0000001) leave essentially nothing between them once
+    // merged/clamped -- computePlayableRanges must not emit a degenerate range.
+    expect(computePlayableRanges(10, [cut(0, 3), cut(3, 10)])).toEqual([]);
+  });
+});
+
+describe("getEditedDuration", () => {
+  it("sums range lengths", () => {
+    const ranges: PlayableRange[] = [
+      { start: 0, end: 3 },
+      { start: 5, end: 10 },
+    ];
+    expect(getEditedDuration(ranges)).toBe(8);
+  });
+
+  it("is zero for no ranges", () => {
+    expect(getEditedDuration([])).toBe(0);
+  });
+});
+
+describe("isCut", () => {
+  const ranges: PlayableRange[] = [
+    { start: 0, end: 3 },
+    { start: 5, end: 10 },
+  ];
+
+  it("is false inside a playable range", () => {
+    expect(isCut(1, ranges)).toBe(false);
+  });
+
+  it("is true inside the gap between ranges", () => {
+    expect(isCut(4, ranges)).toBe(true);
+  });
+
+  it("treats a range's start as playable and its end as not (half-open)", () => {
+    expect(isCut(0, ranges)).toBe(false);
+    expect(isCut(3, ranges)).toBe(true);
+  });
+});
+
+describe("isWordCut / isFullyCut", () => {
+  const cuts = [cut(2, 5)];
+
+  it("a word fully inside a cut is cut", () => {
+    expect(isWordCut(2.5, 3, cuts)).toBe(true);
+  });
+
+  it("a word entirely outside any cut is not cut", () => {
+    expect(isWordCut(6, 7, cuts)).toBe(false);
+  });
+
+  it("a word straddling the cut boundary is not (fully) cut", () => {
+    expect(isWordCut(4, 6, cuts)).toBe(false);
+  });
+
+  it("isFullyCut requires every word to be individually cut", () => {
+    const words = [
+      { id: "a", text: "a", start: 2.1, end: 2.5 },
+      { id: "b", text: "b", start: 2.6, end: 3 },
+    ];
+    expect(isFullyCut(words, cuts)).toBe(true);
+  });
+
+  it("isFullyCut is false if any single word survives", () => {
+    const words = [
+      { id: "a", text: "a", start: 2.1, end: 2.5 },
+      { id: "b", text: "b", start: 6, end: 7 },
+    ];
+    expect(isFullyCut(words, cuts)).toBe(false);
+  });
+
+  it("isFullyCut is false for an empty word list", () => {
+    expect(isFullyCut([], cuts)).toBe(false);
+  });
+});
+
+describe("nextPlayableTime", () => {
+  const ranges: PlayableRange[] = [
+    { start: 0, end: 3 },
+    { start: 5, end: 10 },
+  ];
+
+  it("returns the same time if already playable", () => {
+    expect(nextPlayableTime(1, ranges)).toBe(1);
+  });
+
+  it("jumps forward to the next range's start when inside a cut", () => {
+    expect(nextPlayableTime(4, ranges)).toBe(5);
+  });
+
+  it("returns null at/after the end of the last range", () => {
+    expect(nextPlayableTime(10, ranges)).toBeNull();
+    expect(nextPlayableTime(50, ranges)).toBeNull();
+  });
+});
+
+describe("sourceTimeToEditedTime / editedTimeToSourceTime round-trip", () => {
+  const ranges: PlayableRange[] = [
+    { start: 0, end: 3 },
+    { start: 5, end: 10 },
+  ];
+
+  it("maps source time in the first range unchanged", () => {
+    expect(sourceTimeToEditedTime(1, ranges)).toBe(1);
+  });
+
+  it("maps source time in the second range, collapsing the gap", () => {
+    // 5s of first range consumed (0-3), then 2s into the second range (5-7) -> edited time 3+2=5
+    expect(sourceTimeToEditedTime(7, ranges)).toBe(5);
+  });
+
+  it("clamps time inside a cut gap to the elapsed edited time so far", () => {
+    expect(sourceTimeToEditedTime(4, ranges)).toBe(3);
+  });
+
+  it("is the exact inverse of editedTimeToSourceTime for playable instants", () => {
+    // Excludes exact range-boundary instants (e.g. 5, the start of the
+    // second range) on purpose: at a boundary shared between two adjacent
+    // ranges, multiple source times legitimately map to the same edited
+    // time (see the dedicated boundary test below), so round-tripping
+    // isn't well-defined there.
+    for (const sourceTime of [0, 1, 2.5, 5.001, 7, 9.999]) {
+      const edited = sourceTimeToEditedTime(sourceTime, ranges);
+      expect(editedTimeToSourceTime(edited, ranges)).toBeCloseTo(sourceTime, 10);
+    }
+  });
+
+  it("resolves the range-boundary ambiguity toward the earlier range's end", () => {
+    // Edited time 3 sits exactly between range 1 ending (source 3) and
+    // range 2 starting (source 5) -- both are "correct" since the cut
+    // between them is invisible on the edited timeline. editedTimeToSourceTime
+    // deterministically picks the earlier range's end.
+    expect(sourceTimeToEditedTime(5, ranges)).toBe(3);
+    expect(editedTimeToSourceTime(3, ranges)).toBe(3);
+  });
+
+  it("editedTimeToSourceTime clamps past-the-end time to the last range's end", () => {
+    const editedDuration = getEditedDuration(ranges);
+    expect(editedTimeToSourceTime(editedDuration + 100, ranges)).toBe(10);
+  });
+
+  it("editedTimeToSourceTime returns 0 for an empty range list", () => {
+    expect(editedTimeToSourceTime(5, [])).toBe(0);
+  });
+});
+
+describe("wordSpanBounds", () => {
+  it("spans the first word's start to the last word's end", () => {
+    const words = [
+      { start: 1.0, end: 1.5 },
+      { start: 1.5, end: 2.0 },
+      { start: 2.0, end: 2.4 },
+    ];
+    expect(wordSpanBounds(words, { start: 0, end: 99 })).toEqual({ start: 1.0, end: 2.4 });
+  });
+
+  it("uses the fallback for an empty word list", () => {
+    expect(wordSpanBounds([], { start: 5, end: 10 })).toEqual({ start: 5, end: 10 });
+  });
+
+  it("regression: a word extending past a container's own reported end is not clipped", () => {
+    // Mirrors transcribe.ts tolerating a word up to 50ms past segment.end
+    // when assigning words to a segment -- deleting "the segment" must use
+    // the word's real end (2.55), not the segment's looser reported end
+    // (2.50), or a sliver of that word's footage survives the cut.
+    const segmentReportedBounds = { start: 1.0, end: 2.5 };
+    const words = [
+      { start: 1.0, end: 1.5 },
+      { start: 1.5, end: 2.55 }, // 50ms past the segment's own reported end
+    ];
+    expect(wordSpanBounds(words, segmentReportedBounds)).toEqual({ start: 1.0, end: 2.55 });
+  });
+
+  it("a single-word list spans just that word", () => {
+    expect(wordSpanBounds([{ start: 3, end: 3.2 }], { start: 0, end: 0 })).toEqual({ start: 3, end: 3.2 });
+  });
+});
+
+describe("padCutStart", () => {
+  it("pulls the cut start earlier by the default pad when there's room", () => {
+    // Mirrors the real transcript that surfaced this: a natural pause (word
+    // ending at 3.28, next word reported starting at 4.08) between two
+    // sentences -- plenty of silence to safely absorb the pad into.
+    const allWords = [{ start: 2.8, end: 3.28 }];
+    expect(padCutStart(4.08, allWords)).toBeCloseTo(4.08 - 0.15, 10);
+  });
+
+  it("clamps to the end of the immediately preceding word instead of overrunning it", () => {
+    // Only 40ms of gap before the cut -- less than the default 0.15s pad,
+    // so the pad must not reach back into the previous word's own audio.
+    const allWords = [{ start: 2.0, end: 3.0 }];
+    expect(padCutStart(3.04, allWords)).toBe(3.0);
+  });
+
+  it("clamps to 0 when the cut is near the very start of the video (no preceding word)", () => {
+    expect(padCutStart(0.05, [])).toBe(0);
+  });
+
+  it("picks the correct preceding word out of several, not just the first/last in the list", () => {
+    const allWords = [
+      { start: 0, end: 1 },
+      { start: 1.2, end: 2 },
+      { start: 2.1, end: 2.9 },
+    ];
+    // Preceding word is [2.1, 2.9], not [0,1] or [1.2,2] -- pad reaches back
+    // to 2.9 at most (here the default 0.15s pad fits before that).
+    expect(padCutStart(3.2, allWords)).toBeCloseTo(3.2 - 0.15, 10);
+  });
+
+  it("respects a custom pad duration", () => {
+    const allWords = [{ start: 0, end: 1 }];
+    expect(padCutStart(2, allWords, 0.5)).toBe(1.5);
+  });
+});
+
+describe("cutsOverlapping", () => {
+  it("finds the single cut covering a word inside a bigger range", () => {
+    const cuts = [cut(2, 5), cut(8, 10)];
+    expect(cutsOverlapping(3, 3.5, cuts)).toEqual([cuts[0]]);
+  });
+
+  it("returns every cut that overlaps at all, not just ones fully containing the range", () => {
+    // A word-select delete's own cut partially overlaps a neighboring
+    // filler-word cut -- restoring either one's word should surface both.
+    const cuts = [cut(2, 4), cut(3.9, 6)];
+    expect(cutsOverlapping(3.5, 4.5, cuts)).toEqual(cuts);
+  });
+
+  it("is empty when the range isn't cut at all", () => {
+    expect(cutsOverlapping(10, 11, [cut(2, 5)])).toEqual([]);
+  });
+
+  it("excludes a cut that only touches the range's edge, not its interior", () => {
+    // [start, end) semantics, same as isCut/isWordCut: touching at a single
+    // instant isn't an overlap.
+    expect(cutsOverlapping(5, 6, [cut(2, 5)])).toEqual([]);
+    expect(cutsOverlapping(0, 2, [cut(2, 5)])).toEqual([]);
+  });
+});
