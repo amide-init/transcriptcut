@@ -18,5 +18,7 @@ videoRoute.get("/:id/video", async (c) => {
   }
 
   const file = Bun.file(resolveInDataDir(asset.filePath));
-  return new Response(file, { headers: { "Content-Type": asset.mimeType } });
+  return new Response(file, {
+    headers: { "Content-Type": asset.mimeType, "Accept-Ranges": "bytes" },
+  });
 });
