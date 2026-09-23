@@ -42,14 +42,5 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^5.0.1"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@prisma/engines",
-      "better-sqlite3",
-      "prisma",
-      "protobufjs",
-      "unrs-resolver"
-    ]
   }
 }
