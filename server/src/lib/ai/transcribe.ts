@@ -1,18 +1,13 @@
 import OpenAI from "openai";
+import { getOpenAiApiKey } from "@/lib/settings";
 import type { Transcript, TranscriptSegment, TranscriptWord } from "@/types/transcript";
 
-// Constructed lazily, not at module scope: the OpenAI client throws
-// immediately if OPENAI_API_KEY is unset, and this module gets evaluated
-// during `next build`'s page-data collection for the API route that
-// imports it -- eagerly constructing it here made every build fail
-// without a real key configured (confirmed: every CI run failed on this
-// exact error, since CI intentionally has no secrets). Deferred to first
-// actual call instead, where a real key is only needed because the
-// request can't do anything useful without one anyway.
-let openai: OpenAI | null = null;
+// Constructed fresh per call, not cached: the key can come from
+// settings.json (set via the app's setup screen) and change at runtime
+// without a server restart -- a cached client would keep using a stale
+// (possibly missing) key after someone saves a new one.
 function getOpenAI(): OpenAI {
-  if (!openai) openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  return openai;
+  return new OpenAI({ apiKey: getOpenAiApiKey() });
 }
 
 type WhisperWord = { word: string; start: number; end: number };

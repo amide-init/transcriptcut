@@ -1,15 +1,11 @@
 import OpenAI from "openai";
 import { z } from "zod";
+import { getOpenAiApiKey } from "@/lib/settings";
 import type { Transcript } from "@/types/transcript";
 
-// Constructed lazily, not at module scope -- see the identical note in
-// lib/ai/transcribe.ts. Deferred to first actual call so importing this
-// module (e.g. during `next build`'s page-data collection) doesn't
-// require OPENAI_API_KEY to already be set.
-let openai: OpenAI | null = null;
+// Constructed fresh per call -- see the identical note in lib/ai/transcribe.ts.
 function getOpenAI(): OpenAI {
-  if (!openai) openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  return openai;
+  return new OpenAI({ apiKey: getOpenAiApiKey() });
 }
 
 /**

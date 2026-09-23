@@ -14,6 +14,7 @@ import { fillerWordsRoute } from "@/routes/filler-words";
 import { captionsRoute } from "@/routes/captions";
 import { logoRoute } from "@/routes/logo";
 import { renderRoute } from "@/routes/render";
+import { settingsRoute } from "@/routes/settings";
 
 const app = new Hono();
 
@@ -30,6 +31,7 @@ app.route("/api/projects", fillerWordsRoute);
 app.route("/api/projects", captionsRoute);
 app.route("/api/projects", logoRoute);
 app.route("/api/projects", renderRoute);
+app.route("/api/settings", settingsRoute);
 
 // Serves the built Vite client (server-bundle/client-dist in the packaged
 // Tauri app; unset/missing in plain `bun run dev`, where Vite's own dev
