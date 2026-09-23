@@ -6,7 +6,7 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import globals from "globals";
 
 export default defineConfig([
-  globalIgnores([".next/**", "dist/**", "src/generated/**"]),
+  globalIgnores([".next/**", "dist/**", "src/generated/**", "src-tauri/**"]),
   js.configs.recommended,
   ...tseslint.configs.recommended,
   reactRefresh.configs.vite,
