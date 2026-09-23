@@ -21,42 +21,56 @@ step() { printf '\n==> %s\n' "$1"; }
 
 step "Cleaning previous server-bundle"
 rm -rf "$OUT_DIR"
+mkdir -p "$OUT_DIR"
 
-# `pnpm deploy` (not a plain rsync/cp of server/node_modules, and not a
-# `bun build --target bun` single-file bundle) is required here, for two
-# independently-confirmed reasons:
+# node_modules here has to satisfy two things at once, and getting there
+# took three attempts:
 #
-# 1. pnpm resolves a package's transitive deps through a "private"
-#    per-package node_modules slot inside the workspace root's .pnpm store
-#    (e.g. @prisma/adapter-libsql's own @libsql/client dependency lives as
-#    a *sibling* of adapter-libsql inside
-#    node_modules/.pnpm/@prisma+adapter-libsql@.../node_modules/, not
-#    anywhere reachable by walking server/node_modules's own directory
-#    tree). A naive `rsync -aL server/node_modules` dereferences symlinks
-#    it finds but has no way to discover that sibling relationship, so
-#    @libsql/client silently goes missing. `pnpm deploy` rebuilds a fully
-#    self-contained node_modules (its own local .pnpm virtual store) that
-#    correctly recreates the whole transitive graph.
+# 1. It must be genuinely self-contained (no symlinks pointing back into
+#    this git checkout's central pnpm store) -- a plain `rsync -aL
+#    server/node_modules` fails this: pnpm resolves a package's transitive
+#    deps through a *private* per-package node_modules slot living inside
+#    the workspace root's .pnpm store as a *sibling* of the requiring
+#    package (e.g. @prisma/adapter-libsql's own @libsql/client dependency
+#    lives at node_modules/.pnpm/@prisma+adapter-libsql@.../node_modules/,
+#    not anywhere reachable by walking server/node_modules's own tree), so
+#    a naive copy silently drops @libsql/client.
 #
-# 2. `bun build --target bun` bundles everything into one flat index.js at
-#    the top level, which *destroys* that same private-slot resolution
-#    trick: @libsql/darwin-arm64 (a native binary, left as an external
-#    runtime require rather than inlined) then gets looked up relative to
-#    index.js's own location, which no longer has the nested
-#    node_modules/.pnpm/libsql@.../node_modules/@libsql/ ancestry the
-#    resolution depends on -- confirmed by a bundled run failing with
-#    "Cannot find module '@libsql/darwin-arm64'" even though the exact
-#    same files work when run unbundled. So this bundle ships the
-#    TypeScript source as-is (Bun runs .ts directly, no build step) and
-#    runs via `bun run src/index.ts`, keeping every file's location
-#    relative to node_modules unchanged from how pnpm deploy laid it out.
-step "Running pnpm deploy to produce a self-contained server + node_modules"
-pnpm --filter server deploy --prod --legacy "$OUT_DIR"
+# 2. It must contain zero symlinks at all -- Tauri's `bundle.resources`
+#    copy step does not handle pnpm's nested private-slot symlink
+#    structure correctly (confirmed: a packaged app failed with "Cannot
+#    find module '@prisma/adapter-libsql'"; comparing file counts showed
+#    Tauri's copy landed the same file count but zero of the source's 395
+#    symlinks, silently dropping directories only reachable via one).
+#    `pnpm deploy` alone satisfies (1) but not (2) -- its own node_modules
+#    is self-contained but still internally symlinked. Naively
+#    dereferencing those symlinks after the fact (rsync -aL) breaks (1)
+#    again: each symlink gets flattened independently, losing the sibling
+#    relationship @prisma/adapter-libsql depends on to find @libsql/client
+#    once it's no longer nested inside its own private slot.
+#
+# pnpm's "hoisted" node-linker satisfies both at once -- it's a
+# classic/npm-style flat layout (every package, including transitive
+# deps, sits directly at node_modules/<pkg>) with no private per-package
+# slots and no .pnpm store to symlink into. Verified empirically before
+# relying on it: a hoisted install of just server's prod dependencies
+# landed @libsql/client and @libsql/darwin-arm64 directly under
+# node_modules/@libsql/, and @prisma/adapter-libsql resolves them via a
+# normal upward directory walk, same as npm would produce.
+step "Installing production dependencies with pnpm's hoisted node-linker"
+cp "$SERVER_DIR"/package.json "$OUT_DIR"/package.json
+(cd "$OUT_DIR" && pnpm install --config.node-linker=hoisted --prod --ignore-workspace)
+
+step "Copying server source, Prisma schema, and config"
+cp -R "$SERVER_DIR"/src "$OUT_DIR"/src
+cp -R "$SERVER_DIR"/prisma "$OUT_DIR"/prisma
+cp "$SERVER_DIR"/tsconfig.json "$OUT_DIR"/tsconfig.json
+cp "$SERVER_DIR"/prisma7.config.ts "$OUT_DIR"/prisma7.config.ts
 
 step "Generating the Prisma client (from server/, which has the prisma CLI)"
 (cd "$SERVER_DIR" && bunx prisma generate)
+rm -rf "$OUT_DIR"/src/generated
 mkdir -p "$OUT_DIR"/src/generated
-rm -rf "$OUT_DIR"/src/generated/prisma
 cp -R "$SERVER_DIR"/src/generated/prisma "$OUT_DIR"/src/generated/
 
 step "Copying built client (client/dist) as static assets"
