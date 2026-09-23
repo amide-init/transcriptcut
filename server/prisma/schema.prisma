@@ -1,0 +1,100 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// No User model / ownership fields for v1 — single local user by design.
+// See claude.md sections 2, 9, 17.
+
+model Project {
+  id       String  @id @default(cuid())
+  name     String
+  duration Float?
+  filterId String  @default("none")
+
+  burnInCaptions Boolean @default(false)
+  /// JSON-serialized CaptionStyle (see src/lib/captions/style.ts), null = use the client default.
+  captionStyleJson String?
+  /// JSON-serialized VideoProperties (see src/types/video-properties.ts), null = use the client default (all zero).
+  propertiesJson String?
+
+  /// "top-left" | "top-right" | "bottom-left" | "bottom-right" -- see src/lib/video/logo.ts
+  logoPosition String @default("bottom-right")
+  /// Percent of frame width/height (0-20), not raw pixels -- see src/lib/video/logo.ts.
+  logoPaddingX Float  @default(3)
+  logoPaddingY Float  @default(3)
+  /// 0-100
+  logoOpacity  Int    @default(100)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assets         Asset[]
+  transcript     Transcript?
+  editOperations EditOperation[]
+  renderJobs     RenderJob[]
+}
+
+model Asset {
+  id        String @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  /// "original" | "proxy" | "audio" | "thumbnail" | "render"
+  kind String
+  /// Path relative to DATA_DIR, e.g. "projects/{id}/original/video.mp4"
+  filePath String
+  mimeType String
+  sizeBytes Int
+
+  createdAt DateTime @default(now())
+
+  @@index([projectId])
+}
+
+model Transcript {
+  id        String @id @default(cuid())
+  projectId String @unique
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  /// JSON-serialized TranscriptSegment[] (see src/types/transcript.ts)
+  segmentsJson String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model EditOperation {
+  id        String @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  /// "cut" | "trim" | "split" | "caption"
+  type String
+  /// JSON-serialized operation payload (see src/types/edit-operation.ts)
+  dataJson String
+
+  createdAt DateTime @default(now())
+
+  @@index([projectId])
+}
+
+model RenderJob {
+  id        String @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  /// "queued" | "processing" | "completed" | "failed"
+  status     String  @default("queued")
+  outputPath String?
+  error      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId])
+}
