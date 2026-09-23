@@ -1,8 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
+import { useNavigate, Link } from "react-router-dom";
 import { ChevronLeft } from "lucide-react";
 import { useProjectStore } from "@/stores/project-store";
 import { Button } from "@/components/ui/button";
@@ -20,7 +19,7 @@ async function postJson<T>(url: string, body: unknown): Promise<T | ApiError> {
 }
 
 export function UploadScreen() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [nameDraft, setNameDraft] = useState("Untitled Project");
 
@@ -43,12 +42,14 @@ export function UploadScreen() {
 
     setStatus("uploading");
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const uploadRes = await fetch(`/api/projects/${projectId}/upload`, {
-        method: "POST",
-        body: formData,
-      });
+      const uploadRes = await fetch(
+        `/api/projects/${projectId}/upload?filename=${encodeURIComponent(file.name)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": file.type },
+          body: file,
+        }
+      );
       const uploaded: { success: true } | ApiError = await uploadRes.json();
       if (!uploaded.success) {
         setErrorState(uploaded.error.message);
@@ -72,7 +73,7 @@ export function UploadScreen() {
       return;
     }
 
-    router.push(`/editor/${projectId}`);
+    navigate(`/editor/${projectId}`);
   };
 
   const busy = status === "creating" || status === "uploading" || status === "transcribing";
@@ -91,7 +92,7 @@ export function UploadScreen() {
       <div className="w-full max-w-sm space-y-6">
         {!busy && (
           <Link
-            href="/"
+            to="/"
             className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
           >
             <ChevronLeft className="size-4" />

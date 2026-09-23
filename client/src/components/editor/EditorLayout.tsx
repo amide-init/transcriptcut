@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { Link } from "react-router-dom";
 import { AudioLines, ChevronLeft } from "lucide-react";
 import { VideoPlayer } from "@/components/video-player/VideoPlayer";
 import { TranscriptPanel } from "@/components/transcript/TranscriptPanel";
@@ -24,7 +24,7 @@ export function EditorLayout({ videoUrl }: { videoUrl: string }) {
       <nav className="flex h-11 shrink-0 items-center justify-between">
         <div className="flex items-center gap-3">
           <Link
-            href="/"
+            to="/"
             className="group flex items-center gap-2 rounded-md py-1 pr-2 pl-1 hover:bg-muted"
             title="All projects"
           >
