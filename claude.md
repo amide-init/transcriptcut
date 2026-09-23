@@ -1063,9 +1063,6 @@ Do NOT initially build:
 * complex animation system
 * multi-user real-time editing
 * mobile application
-* desktop application (packaging, i.e. Tauri itself — not yet built; see
-  section 13's client/server split, which exists specifically to make
-  this addable later without a rewrite)
 * GPU rendering
 * full Descript feature parity
 
@@ -1300,3 +1297,86 @@ stranger will read, because eventually one will.
 None of this is optional polish. For an OSS project, the commit history
 is part of what contributors read to understand the codebase — treat it
 with the same care as the code itself.
+
+---
+
+# 35. Mac App Packaging (Tauri)
+
+A native macOS `.app` build exists at `client/src-tauri/`, wrapping the
+Vite client + Bun backend with Tauri v2. **Scope of the current build:
+personal use on this machine only** — ad-hoc signed (no paid Apple
+Developer account), Apple Silicon (arm64) only, no notarization, not
+meant for distribution to other people or other Macs. Extending it to
+real distribution (Developer ID signing, notarization, universal
+builds) is a legitimate future step, not something to add speculatively.
+
+## Architecture
+
+Rather than a compiled standalone sidecar binary (Tauri's usual
+pattern), the app spawns the **system-installed `bun`** to run a staged
+copy of the backend, for one specific reason: `bun build --compile`
+(the mechanism for a self-contained sidecar binary) has a known,
+unresolved upstream bug with `@libsql`, this project's SQLite driver —
+confirmed via `oven-sh/bun` issue #18909. Compiling would need a much
+bigger rewrite (dropping `@prisma/adapter-libsql` entirely); spawning
+the already-installed runtime instead sidesteps the bug completely,
+at the cost of requiring Bun to already be on the machine running the
+app — a non-issue for this personal-use-only scope.
+
+* `scripts/prepare-server-bundle.sh` stages a self-contained copy of
+  the backend at repo-root `server-bundle/` (gitignored): server
+  source (unbundled — Bun runs `.ts` directly), a **hoisted** (flat,
+  npm-style, zero symlinks) `node_modules`, the generated Prisma
+  client, the built Vite client, a pre-migrated empty `app.db.template`,
+  and a copy of `server/.env`. The node-linker choice matters: pnpm's
+  default nested/symlinked `node_modules` (even via `pnpm deploy`,
+  which does correctly resolve the full dependency graph) breaks once
+  Tauri's own resource-bundler copies it into the `.app` — confirmed
+  empirically that Tauri's copy step silently drops directories only
+  reachable via a symlink. `pnpm install --config.node-linker=hoisted`
+  avoids the problem at the source instead of working around Tauri's
+  copier.
+* `client/src-tauri/tauri.conf.json`'s `build.frontendDist` is a URL
+  (`http://localhost:3001`), not a static path — the packaged app's
+  window loads directly from the spawned Bun server, which serves both
+  the built static client and the `/api/*` routes on one origin,
+  exactly like the dev proxy does. `beforeBuildCommand` builds the
+  client and runs the staging script, with an **explicit absolute
+  `cwd`** (not a relative `cd ../..`) — Tauri hook commands run from
+  the frontend package directory (`client/`), one level shallower than
+  it looks from `src-tauri/`'s own location.
+* `client/src-tauri/src/lib.rs`'s `setup()` hook resolves
+  `resource_dir()`/`app_data_dir()`, seeds the database from
+  `app.db.template` on first launch only (never overwrites existing
+  data), spawns `bun run src/index.ts` from the staged bundle via
+  `tauri-plugin-shell` with `DATABASE_URL`/`DATA_DIR`/`PORT`/
+  `FFMPEG_PATH` pointed at the right places, creates the main window
+  hidden and reveals it once the server's own "server listening" log
+  line appears (avoids a startup race against the window trying to
+  load a server that isn't up yet), and kills the spawned process on
+  `RunEvent::Exit` (not `ExitRequested` — a normal macOS quit skips
+  straight to `Exit`).
+
+## Building it
+
+```bash
+cd client
+pnpm exec tauri build
+```
+
+Produces `client/src-tauri/target/release/bundle/macos/AI Video Editor.app`.
+Since it's ad-hoc signed rather than signed with a real Developer ID,
+launch it with right-click → Open the first time (a plain double-click
+triggers Gatekeeper's "unidentified developer" block).
+
+## Known constraints of this round
+
+* App data lives at `~/Library/Application Support/com.local.aivideoeditor/`,
+  separate from whatever's in `server/data/` during local dev — the
+  packaged app starts with an empty project list on first launch, not
+  a copy of your dev data.
+* `FFMPEG_PATH` and the `bun` executable path are both hardcoded
+  absolute paths in `lib.rs` (matching this machine's Homebrew/Bun
+  install locations) — a deliberate simplicity trade for
+  personal-use-only scope, not something to generalize until this
+  needs to run on a different machine.

@@ -116,6 +116,22 @@ Open [http://localhost:5173](http://localhost:5173). See
 [`server/.env.example`](./server/.env.example) for what each variable
 does, and [`CONTRIBUTING.md`](./CONTRIBUTING.md) for more.
 
+### macOS app
+
+A native `.app` build also exists (Tauri), currently scoped to personal
+use on your own Apple Silicon Mac — ad-hoc signed, no Apple Developer
+account needed, not meant for distributing to others yet:
+
+```bash
+cd client
+pnpm exec tauri build
+```
+
+Produces `client/src-tauri/target/release/bundle/macos/AI Video Editor.app`
+— right-click → Open the first time to clear Gatekeeper's unsigned-app
+warning. See `claude.md` section 35 for how it's wired together and its
+current constraints.
+
 ## Testing
 
 Deterministic unit tests (Vitest) cover the core editing logic — timeline
