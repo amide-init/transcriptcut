@@ -12,7 +12,7 @@ The MVP should prioritize a reliable transcript ↔ video editing workflow over 
 
 This project is **local-first and open source**. It runs entirely on your
 own machine — no cloud account, no vendor sign-up, no bill — with a single
-`npm install && npm run dev`. The only external dependency is an LLM
+`pnpm install && pnpm run dev`. The only external dependency is an LLM
 provider API key (for transcription and AI editing), used purely for
 inference calls, never for storage. See section 13 for the full
 architecture rationale.
@@ -579,11 +579,24 @@ child process on the same machine as everything else (see section 18).
 
 No cloud account is required to run or develop this project.
 
-* **Database:** SQLite via Prisma. A single file, no server process, no
-  connection string to configure.
+The app is two local processes, not one: a Vite-built React SPA
+(`client/`, no server-side rendering) and a Bun/Hono backend (`server/`)
+that owns the database, filesystem, FFmpeg, and AI calls. `pnpm run dev`
+from the repo root runs both together; in production the built client is
+served as static files, optionally by the same Bun process. This split —
+no server rendering, one deployable backend unit with a clear entrypoint
+— exists so the backend can later run as a Tauri sidecar for a native Mac
+app release; nothing about "no cloud account" or "local-first" changes,
+it's still one machine, one data directory, no accounts.
+
+* **Database:** SQLite via Prisma, using the `@prisma/adapter-libsql`
+  driver adapter (chosen over `better-sqlite3` specifically to avoid
+  native-binding packaging pain under Bun/Tauri). Still a single file, no
+  server process, no connection string to configure.
 * **Storage:** the local filesystem, under a configurable data directory
   (see section 15).
-* **Rendering:** FFmpeg, invoked as a local child process (see section 14).
+* **Rendering:** FFmpeg, invoked as a local child process from the Bun
+  backend (see section 14).
 * **AI:** an LLM provider API key (OpenAI by default) for transcription and
   editing calls only — never for storage. Keep the provider behind a
   service interface (section 29) so it can be swapped.
@@ -606,7 +619,7 @@ Use:
 ```text
 Frontend
    ↓
-Next.js API route
+Hono API route (Bun)
    ↓
 Create RenderJob row (SQLite, status: "queued")
    ↓
@@ -801,13 +814,20 @@ POST   /api/projects/:id/transcribe
 
 GET    /api/projects/:id/transcript
 
-POST   /api/projects/:id/ai/edit
 POST   /api/projects/:id/operations
 DELETE /api/projects/:id/operations/:operationId
 
 POST   /api/projects/:id/render
 GET    /api/projects/:id/render/:jobId
 ```
+
+(No `POST /api/projects/:id/ai/edit` — the free-text AI command bar this
+would have backed was removed; see section 3's status note.)
+
+`POST /api/projects/:id/upload` takes the raw video body (`Content-Type:
+video/*`, filename via a `?filename=` query param), not
+`multipart/form-data` — this lets the server stream the body straight to
+disk (`Bun.write`) without buffering the whole upload in memory.
 
 Use typed request/response schemas.
 
@@ -1043,7 +1063,9 @@ Do NOT initially build:
 * complex animation system
 * multi-user real-time editing
 * mobile application
-* desktop application
+* desktop application (packaging, i.e. Tauri itself — not yet built; see
+  section 13's client/server split, which exists specifically to make
+  this addable later without a rewrite)
 * GPU rendering
 * full Descript feature parity
 
@@ -1143,50 +1165,51 @@ A working transcript-based editor is more valuable than an unfinished full-featu
 
 ---
 
-# 31. Suggested Repository Structure
+# 31. Repository Structure
+
+Two packages in one pnpm workspace — `client/` (Vite + React, no server
+rendering) and `server/` (Bun + Hono, owns the database/filesystem/
+FFmpeg/AI calls):
 
 ```text
-prisma/
-└── schema.prisma
+client/
+├── index.html
+├── vite.config.mts
+└── src/
+    ├── main.tsx, App.tsx          (entry, React Router root)
+    ├── routes/                    (DashboardRoute, EditorRoute, NewProjectRoute, ...)
+    ├── components/
+    │   ├── editor/
+    │   ├── timeline/
+    │   ├── transcript/
+    │   └── video-player/
+    ├── lib/                       (dual-use pure logic also needed server-side:
+    │                                video/, timeline/cuts.ts + sentences.ts,
+    │                                captions/style.ts + generate.ts — duplicated,
+    │                                not imported, across the client/server boundary)
+    ├── types/
+    └── stores/                    (Zustand: project, timeline, transcript, player, caption-style)
 
-src/
-├── app/
-│   ├── dashboard/
-│   ├── editor/
-│   └── api/
-│
-├── components/
-│   ├── editor/
-│   ├── timeline/
-│   ├── transcript/
-│   ├── video-player/
-│   └── ai/
-│
-├── lib/
-│   ├── db/              (Prisma client)
-│   ├── ai/
-│   ├── langgraph/
-│   ├── ffmpeg/
-│   ├── storage/         (local filesystem helpers)
-│   └── validation/
-│
-├── agents/
-│   ├── director/
-│   ├── editor/
-│   └── validator/
-│
-├── types/
-│   ├── project.ts
-│   ├── transcript.ts
-│   ├── timeline.ts
-│   └── edit-operation.ts
-│
-└── stores/
-    ├── project-store.ts
-    ├── timeline-store.ts
-    ├── transcript-store.ts
-    └── editor-store.ts
+server/
+├── prisma/
+│   └── schema.prisma
+└── src/
+    ├── index.ts                   (Hono app entrypoint)
+    ├── routes/                    (one file per resource, mounted under /api/projects)
+    └── lib/
+        ├── db/                    (Prisma client, @prisma/adapter-libsql)
+        ├── ai/                    (Whisper transcription, filler-word detection)
+        ├── ffmpeg/                (render-job orchestrator, argv builder, execFile wrapper)
+        ├── storage/               (local filesystem helpers)
+        ├── validation/            (Zod request schemas)
+        └── captions/, video/, timeline/  (server's copy of the dual-use logic above)
 ```
+
+No `agents/`/`lib/langgraph/` directory exists in either package — the
+LangGraph Director/Editor/Validator pipeline (sections 5–8) was built,
+verified, then deliberately removed per section 3's status note. It's not
+part of the current app; treat sections 5–8 as a historical design record,
+not a structure to scaffold.
 
 ---
 
