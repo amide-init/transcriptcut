@@ -47,8 +47,9 @@ Local persistence (SQLite via Prisma) and project CRUD are built and in
 use. The app is a Vite React SPA (`client/`) talking to a Bun/Hono
 backend (`server/`) — the two run as separate processes, kept in one
 piece by `pnpm run dev` from the repo root. This split (no server-side
-rendering, one deployable backend unit) is prep for an eventual native
-Mac app via Tauri; see the [issue tracker](https://github.com/amide-init/transcriptcut/issues)
+rendering, one deployable backend unit) is also what makes the native
+macOS app possible — see [Download](#download) below — and see the
+[issue tracker](https://github.com/amide-init/transcriptcut/issues)
 for the full breakdown of what's done vs. planned.
 
 There is no login — v1 is a single local user by design, not a gap to
