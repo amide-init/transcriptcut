@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import { Link } from "react-router-dom";
 import { Captions, Film, MoreVertical, Scissors } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
@@ -125,7 +125,7 @@ export function ProjectRow({
   return (
     <div className="group relative flex flex-col rounded-xl border border-border bg-card transition-colors hover:border-primary/40">
       <Link
-        href={`/editor/${project.id}`}
+        to={`/editor/${project.id}`}
         className="relative block aspect-video shrink-0 overflow-hidden rounded-t-xl bg-muted"
       >
         {project.hasVideo ? (
@@ -160,7 +160,7 @@ export function ProjectRow({
             className="h-7"
           />
         ) : (
-          <Link href={`/editor/${project.id}`} className="truncate text-sm font-medium hover:underline">
+          <Link to={`/editor/${project.id}`} className="truncate text-sm font-medium hover:underline">
             {project.name}
           </Link>
         )}

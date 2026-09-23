@@ -1,0 +1,49 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "AI Video Editor",
+  "version": "0.1.0",
+  "identifier": "com.local.aivideoeditor",
+  "build": {
+    "frontendDist": "http://localhost:3001",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "pnpm dev",
+    "beforeBuildCommand": "cd .. && pnpm --filter client build && bash scripts/prepare-server-bundle.sh"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "AI Video Editor",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 960,
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false,
+        "visible": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": {
+      "../../server-bundle/": "server-bundle/"
+    },
+    "macOS": {
+      "signingIdentity": "-"
+    },
+    "android": {
+      "debugApplicationIdSuffix": ".debug"
+    }
+  }
+}

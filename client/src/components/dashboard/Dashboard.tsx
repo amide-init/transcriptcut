@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { Link } from "react-router-dom";
 import { AudioLines, FolderPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ProjectRow } from "@/components/dashboard/ProjectRow";
@@ -44,7 +44,7 @@ export function Dashboard({ initialProjects }: { initialProjects: Project[] }) {
           </p>
         </div>
         <Button asChild size="sm">
-          <Link href="/new">
+          <Link to="/new">
             <FolderPlus className="size-3.5" />
             New project
           </Link>
@@ -61,7 +61,7 @@ export function Dashboard({ initialProjects }: { initialProjects: Project[] }) {
             Upload a video to auto-transcribe it, then edit the video by editing the words.
           </p>
           <Button asChild size="sm" className="mt-4">
-            <Link href="/new">New project</Link>
+            <Link to="/new">New project</Link>
           </Button>
         </div>
       ) : (

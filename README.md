@@ -44,10 +44,12 @@ the actual export drifting apart, which happened in practice for several
 of these (see the issue tracker's closed bugs).
 
 Local persistence (SQLite via Prisma) and project CRUD are built and in
-use. The separate `server/` directory isn't — see the
-[issue tracker](https://github.com/amide-init/transcriptcut/issues) for the
-full breakdown of what's done vs. planned. Everything currently runs
-inside the `client/` Next.js app, including the API routes.
+use. The app is a Vite React SPA (`client/`) talking to a Bun/Hono
+backend (`server/`) — the two run as separate processes, kept in one
+piece by `pnpm run dev` from the repo root. This split (no server-side
+rendering, one deployable backend unit) is prep for an eventual native
+Mac app via Tauri; see the [issue tracker](https://github.com/amide-init/transcriptcut/issues)
+for the full breakdown of what's done vs. planned.
 
 There is no login — v1 is a single local user by design, not a gap to
 fill in. **Don't expose this to a public or shared network** without
@@ -57,9 +59,9 @@ adding real authentication first; see `claude.md` section 18.
 
 ```text
 claude.md    — product spec
-client/      — Next.js app (editor UI + API routes)
+client/      — Vite + React editor UI (SPA, no server rendering)
+server/      — Bun + Hono backend (API routes, FFmpeg, Prisma/SQLite, OpenAI)
 docs/        — documentation site (VitePress, deployed to GitHub Pages)
-server/      — reserved for future use, not in use yet
 ```
 
 ## Documentation
@@ -77,17 +79,18 @@ pnpm install
 pnpm run dev
 ```
 
-## Running the client
+## Running the app
 
-Requires [FFmpeg](https://ffmpeg.org/download.html) on your machine
-(used for cuts and export) and an OpenAI API key (used server-side only,
-for transcription).
+Requires [FFmpeg](https://ffmpeg.org/download.html) and
+[Bun](https://bun.sh) (the backend's runtime) on your machine, plus an
+OpenAI API key (used server-side only, for transcription).
 
 ### macOS quick start
 
-[`scripts/setup-mac.sh`](./scripts/setup-mac.sh) installs Node/pnpm/FFmpeg
-(with subtitle burn-in support) via Homebrew if you don't already have
-them, installs dependencies, and walks you through `.env`:
+[`scripts/setup-mac.sh`](./scripts/setup-mac.sh) installs Node/pnpm/Bun/
+FFmpeg (with subtitle burn-in support) via Homebrew if you don't already
+have them, installs dependencies for the whole workspace, and walks you
+through `.env`:
 
 ```bash
 git clone https://github.com/amide-init/transcriptcut.git
@@ -95,22 +98,44 @@ cd transcriptcut
 ./scripts/setup-mac.sh
 ```
 
-Then `cd client && pnpm run dev`. Safe to re-run -- it only installs
-what's missing and never overwrites an existing `.env`.
+Then `pnpm run dev` from the repo root. Safe to re-run -- it only
+installs what's missing and never overwrites an existing `.env`.
 
 ### Manual setup (any platform)
 
 ```bash
-cd client
-pnpm install
-cp .env.example .env   # then fill in OPENAI_API_KEY
-pnpm exec prisma generate
-pnpm run dev
+pnpm install                  # installs deps for client + server
+cd server
+cp .env.example .env          # then fill in OPENAI_API_KEY
+bunx prisma generate
+cd ..
+pnpm run dev                  # runs the Vite client and Bun backend together
 ```
 
-Open [http://localhost:3000](http://localhost:3000). See
-[`.env.example`](./client/.env.example) for what each variable does, and
-[`CONTRIBUTING.md`](./CONTRIBUTING.md) for more.
+Open [http://localhost:5173](http://localhost:5173). See
+[`server/.env.example`](./server/.env.example) for what each variable
+does, and [`CONTRIBUTING.md`](./CONTRIBUTING.md) for more.
+
+### Download
+
+A native macOS app is also available (Apple Silicon only) — no need to
+clone the repo or run anything. Grab it from the
+**[docs download page](https://amide-init.github.io/transcriptcut/download)**,
+which also covers the one-time Gatekeeper step (this build is ad-hoc
+signed, not signed with a paid Apple Developer account) and the
+first-launch API key setup.
+
+To build it yourself instead:
+
+```bash
+cd client
+pnpm exec tauri build
+```
+
+Produces `client/src-tauri/target/release/bundle/{macos,dmg}/`. See
+`claude.md` section 35 for how it's wired together, and
+[`.github/workflows/build-macos-app.yml`](./.github/workflows/build-macos-app.yml)
+for how CI builds and releases it on a version tag push.
 
 ## Testing
 
@@ -120,8 +145,7 @@ builder, path-traversal safety, and the CSS-preview/ffmpeg-export formula
 parity work described in the issue tracker:
 
 ```bash
-cd client
-pnpm run test
+pnpm run test   # runs both client and server test suites
 ```
 
 CI runs the same command on every PR. There's no end-to-end/UI test suite

@@ -12,7 +12,7 @@ The MVP should prioritize a reliable transcript ↔ video editing workflow over 
 
 This project is **local-first and open source**. It runs entirely on your
 own machine — no cloud account, no vendor sign-up, no bill — with a single
-`npm install && npm run dev`. The only external dependency is an LLM
+`pnpm install && pnpm run dev`. The only external dependency is an LLM
 provider API key (for transcription and AI editing), used purely for
 inference calls, never for storage. See section 13 for the full
 architecture rationale.
@@ -579,11 +579,24 @@ child process on the same machine as everything else (see section 18).
 
 No cloud account is required to run or develop this project.
 
-* **Database:** SQLite via Prisma. A single file, no server process, no
-  connection string to configure.
+The app is two local processes, not one: a Vite-built React SPA
+(`client/`, no server-side rendering) and a Bun/Hono backend (`server/`)
+that owns the database, filesystem, FFmpeg, and AI calls. `pnpm run dev`
+from the repo root runs both together; in production the built client is
+served as static files, optionally by the same Bun process. This split —
+no server rendering, one deployable backend unit with a clear entrypoint
+— exists so the backend can later run as a Tauri sidecar for a native Mac
+app release; nothing about "no cloud account" or "local-first" changes,
+it's still one machine, one data directory, no accounts.
+
+* **Database:** SQLite via Prisma, using the `@prisma/adapter-libsql`
+  driver adapter (chosen over `better-sqlite3` specifically to avoid
+  native-binding packaging pain under Bun/Tauri). Still a single file, no
+  server process, no connection string to configure.
 * **Storage:** the local filesystem, under a configurable data directory
   (see section 15).
-* **Rendering:** FFmpeg, invoked as a local child process (see section 14).
+* **Rendering:** FFmpeg, invoked as a local child process from the Bun
+  backend (see section 14).
 * **AI:** an LLM provider API key (OpenAI by default) for transcription and
   editing calls only — never for storage. Keep the provider behind a
   service interface (section 29) so it can be swapped.
@@ -606,7 +619,7 @@ Use:
 ```text
 Frontend
    ↓
-Next.js API route
+Hono API route (Bun)
    ↓
 Create RenderJob row (SQLite, status: "queued")
    ↓
@@ -801,13 +814,20 @@ POST   /api/projects/:id/transcribe
 
 GET    /api/projects/:id/transcript
 
-POST   /api/projects/:id/ai/edit
 POST   /api/projects/:id/operations
 DELETE /api/projects/:id/operations/:operationId
 
 POST   /api/projects/:id/render
 GET    /api/projects/:id/render/:jobId
 ```
+
+(No `POST /api/projects/:id/ai/edit` — the free-text AI command bar this
+would have backed was removed; see section 3's status note.)
+
+`POST /api/projects/:id/upload` takes the raw video body (`Content-Type:
+video/*`, filename via a `?filename=` query param), not
+`multipart/form-data` — this lets the server stream the body straight to
+disk (`Bun.write`) without buffering the whole upload in memory.
 
 Use typed request/response schemas.
 
@@ -1043,7 +1063,6 @@ Do NOT initially build:
 * complex animation system
 * multi-user real-time editing
 * mobile application
-* desktop application
 * GPU rendering
 * full Descript feature parity
 
@@ -1143,50 +1162,51 @@ A working transcript-based editor is more valuable than an unfinished full-featu
 
 ---
 
-# 31. Suggested Repository Structure
+# 31. Repository Structure
+
+Two packages in one pnpm workspace — `client/` (Vite + React, no server
+rendering) and `server/` (Bun + Hono, owns the database/filesystem/
+FFmpeg/AI calls):
 
 ```text
-prisma/
-└── schema.prisma
+client/
+├── index.html
+├── vite.config.mts
+└── src/
+    ├── main.tsx, App.tsx          (entry, React Router root)
+    ├── routes/                    (DashboardRoute, EditorRoute, NewProjectRoute, ...)
+    ├── components/
+    │   ├── editor/
+    │   ├── timeline/
+    │   ├── transcript/
+    │   └── video-player/
+    ├── lib/                       (dual-use pure logic also needed server-side:
+    │                                video/, timeline/cuts.ts + sentences.ts,
+    │                                captions/style.ts + generate.ts — duplicated,
+    │                                not imported, across the client/server boundary)
+    ├── types/
+    └── stores/                    (Zustand: project, timeline, transcript, player, caption-style)
 
-src/
-├── app/
-│   ├── dashboard/
-│   ├── editor/
-│   └── api/
-│
-├── components/
-│   ├── editor/
-│   ├── timeline/
-│   ├── transcript/
-│   ├── video-player/
-│   └── ai/
-│
-├── lib/
-│   ├── db/              (Prisma client)
-│   ├── ai/
-│   ├── langgraph/
-│   ├── ffmpeg/
-│   ├── storage/         (local filesystem helpers)
-│   └── validation/
-│
-├── agents/
-│   ├── director/
-│   ├── editor/
-│   └── validator/
-│
-├── types/
-│   ├── project.ts
-│   ├── transcript.ts
-│   ├── timeline.ts
-│   └── edit-operation.ts
-│
-└── stores/
-    ├── project-store.ts
-    ├── timeline-store.ts
-    ├── transcript-store.ts
-    └── editor-store.ts
+server/
+├── prisma/
+│   └── schema.prisma
+└── src/
+    ├── index.ts                   (Hono app entrypoint)
+    ├── routes/                    (one file per resource, mounted under /api/projects)
+    └── lib/
+        ├── db/                    (Prisma client, @prisma/adapter-libsql)
+        ├── ai/                    (Whisper transcription, filler-word detection)
+        ├── ffmpeg/                (render-job orchestrator, argv builder, execFile wrapper)
+        ├── storage/               (local filesystem helpers)
+        ├── validation/            (Zod request schemas)
+        └── captions/, video/, timeline/  (server's copy of the dual-use logic above)
 ```
+
+No `agents/`/`lib/langgraph/` directory exists in either package — the
+LangGraph Director/Editor/Validator pipeline (sections 5–8) was built,
+verified, then deliberately removed per section 3's status note. It's not
+part of the current app; treat sections 5–8 as a historical design record,
+not a structure to scaffold.
 
 ---
 
@@ -1277,3 +1297,116 @@ stranger will read, because eventually one will.
 None of this is optional polish. For an OSS project, the commit history
 is part of what contributors read to understand the codebase — treat it
 with the same care as the code itself.
+
+---
+
+# 35. Mac App Packaging (Tauri)
+
+A native macOS `.app` build exists at `client/src-tauri/`, wrapping the
+Vite client + Bun backend with Tauri v2, built and released via CI
+(`.github/workflows/build-macos-app.yml`) and downloadable from the
+docs site. **Scope: ad-hoc signed (no paid Apple Developer account),
+Apple Silicon (arm64) only, no notarization** — a deliberate choice,
+not an oversight: downloaders hit Gatekeeper's "unidentified
+developer" warning and need to right-click → Open once (documented on
+the download page). Real Developer ID signing + notarization + a
+universal (Intel) build are legitimate future steps, not something to
+add speculatively.
+
+## Architecture
+
+Rather than a compiled standalone sidecar binary (Tauri's usual
+pattern), the app spawns the **system-installed `bun`** to run a staged
+copy of the backend, for one specific reason: `bun build --compile`
+(the mechanism for a self-contained sidecar binary) has a known,
+unresolved upstream bug with `@libsql`, this project's SQLite driver —
+confirmed via `oven-sh/bun` issue #18909. Compiling would need a much
+bigger rewrite (dropping `@prisma/adapter-libsql` entirely); spawning
+the already-installed runtime instead sidesteps the bug completely,
+at the cost of requiring Bun to already be on the machine running the
+app — a non-issue for this personal-use-only scope.
+
+* `scripts/prepare-server-bundle.sh` stages a self-contained copy of
+  the backend at repo-root `server-bundle/` (gitignored): server
+  source (unbundled — Bun runs `.ts` directly), a **hoisted** (flat,
+  npm-style, zero symlinks) `node_modules`, the generated Prisma
+  client, the built Vite client, and a pre-migrated empty
+  `app.db.template`. The node-linker choice matters: pnpm's default
+  nested/symlinked `node_modules` (even via `pnpm deploy`, which does
+  correctly resolve the full dependency graph) breaks once Tauri's own
+  resource-bundler copies it into the `.app` — confirmed empirically
+  that Tauri's copy step silently drops directories only reachable via
+  a symlink. `pnpm install --config.node-linker=hoisted` avoids the
+  problem at the source instead of working around Tauri's copier.
+  **`server/.env` is deliberately never copied into the bundle** — see
+  the OpenAI API key note below.
+* `client/src-tauri/tauri.conf.json`'s `build.frontendDist` is a URL
+  (`http://localhost:3001`), not a static path — the packaged app's
+  window loads directly from the spawned Bun server, which serves both
+  the built static client and the `/api/*` routes on one origin,
+  exactly like the dev proxy does. `beforeBuildCommand` builds the
+  client and runs the staging script (`cd .. && pnpm --filter client
+  build && bash scripts/prepare-server-bundle.sh`) — Tauri hook
+  commands run from the frontend package directory (`client/`), so
+  `cd ..` alone reaches the repo root; an earlier version of this
+  config had an absolute machine-specific path here instead, which
+  worked locally but would have failed on any CI runner.
+* `client/src-tauri/src/lib.rs`'s `setup()` hook resolves
+  `resource_dir()`/`app_data_dir()`, seeds the database from
+  `app.db.template` on first launch only (never overwrites existing
+  data), spawns `bun run src/index.ts` from the staged bundle via
+  `tauri-plugin-shell` with `DATABASE_URL`/`DATA_DIR`/`PORT`/
+  `FFMPEG_PATH` pointed at the right places, creates the main window
+  hidden and reveals it once the server's own "server listening" log
+  line appears (avoids a startup race against the window trying to
+  load a server that isn't up yet), and kills the spawned process on
+  `RunEvent::Exit` (not `ExitRequested` — a normal macOS quit skips
+  straight to `Exit`).
+
+## Building it
+
+```bash
+cd client
+pnpm exec tauri build
+```
+
+Produces both `client/src-tauri/target/release/bundle/macos/AI Video
+Editor.app` and a `.dmg` alongside it (`bundle.targets` includes both).
+Since it's ad-hoc signed rather than signed with a real Developer ID,
+launch it with right-click → Open the first time (a plain double-click
+triggers Gatekeeper's "unidentified developer" block) — this applies
+whether you built it yourself or downloaded a release.
+
+CI (`.github/workflows/build-macos-app.yml`) runs this same command on
+`macos-latest` for every `v*.*.*` tag push, uploads the result as a
+workflow artifact on every run (including manual `workflow_dispatch`,
+for testing without touching anything public), and additionally
+attaches it to the matching GitHub Release when the run was a real tag
+push. No Apple secrets needed — ad-hoc signing requires no certificate
+or notarization credentials.
+
+## The OpenAI API key
+
+Not baked into the build. Each person who runs the app (whether built
+locally or downloaded) is asked for their own key on first launch —
+see `server/src/lib/settings.ts` (`DATA_DIR/settings.json`, checked
+before falling back to `server/.env`'s `OPENAI_API_KEY` for local dev)
+and `client/src/routes/SetupRoute.tsx`. An earlier version of this
+build did copy `server/.env` — including a real key — into every
+bundle; that was fine while builds never left the developer's own
+machine, but had to change once the app became publicly downloadable,
+since anyone could otherwise have extracted the key from the bundle.
+
+## Known constraints
+
+* App data lives at `~/Library/Application Support/com.local.aivideoeditor/`,
+  separate from whatever's in `server/data/` during local dev — the
+  packaged app starts with an empty project list on first launch, not
+  a copy of your dev data.
+* `FFMPEG_PATH` and the `bun` executable path are hardcoded in
+  `lib.rs` to the standard Homebrew/Bun install locations on any
+  Apple Silicon Mac (`/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg`,
+  `~/.bun/bin/bun`) — not this-machine-specific, but they are real
+  prerequisites: anyone running the app (built locally or downloaded)
+  needs Bun and Homebrew's `ffmpeg-full` already installed, documented
+  on the docs site's download page.

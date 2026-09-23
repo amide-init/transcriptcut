@@ -35,12 +35,15 @@ practice for several of these (see the issue tracker's closed bugs).
 Local persistence (SQLite via Prisma) and project CRUD are built and in
 use.
 
-## Not yet in use
+## Testing
 
-The separate `server/` directory is reserved for future use but isn't
-active — everything currently runs inside the `client/` Next.js app,
-including the API routes. There's no end-to-end/UI test suite yet (only
-deterministic Vitest unit tests).
+There's no end-to-end/UI test suite yet — only deterministic Vitest unit
+tests (client + server), run on every PR in CI.
+
+## macOS app
+
+A native `.app` build (Tauri) is also available, built and released via
+CI — see [Download](/download).
 
 ## No accounts
 

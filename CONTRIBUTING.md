@@ -8,30 +8,32 @@ issues for bugs and ideas.
 ## Running it locally
 
 On macOS, `./scripts/setup-mac.sh` handles all of this for you (Node/pnpm/
-FFmpeg via Homebrew, `pnpm install`, `prisma generate`, and `.env`) --
+Bun/FFmpeg via Homebrew, `pnpm install`, `prisma generate`, and `.env`) --
 see the README's "macOS quick start". Otherwise, manually:
 
 ```bash
-cd client
-pnpm install
-cp .env.example .env   # then fill in OPENAI_API_KEY
-pnpm exec prisma generate
-pnpm run dev
+pnpm install                  # installs deps for client + server
+cd server
+cp .env.example .env          # then fill in OPENAI_API_KEY
+bunx prisma generate
+cd ..
+pnpm run dev                  # runs the Vite client and Bun backend together
 ```
 
-Open [http://localhost:3000](http://localhost:3000). See
-[`.env.example`](./client/.env.example) for what each variable does.
+Open [http://localhost:5173](http://localhost:5173). See
+[`server/.env.example`](./server/.env.example) for what each variable
+does.
 
-You'll also need [FFmpeg](https://ffmpeg.org/download.html) on your
-machine for transcript editing and export to work. If burning in captions
-fails with `No such filter: 'subtitles'`, your FFmpeg build doesn't
-include libass — see the `FFMPEG_PATH` note in `.env.example` (or just use
-`scripts/setup-mac.sh`, which installs and points at a build that has it).
+You'll also need [FFmpeg](https://ffmpeg.org/download.html) and
+[Bun](https://bun.sh) (the backend's runtime) on your machine. If burning
+in captions fails with `No such filter: 'subtitles'`, your FFmpeg build
+doesn't include libass — see the `FFMPEG_PATH` note in `.env.example` (or
+just use `scripts/setup-mac.sh`, which installs and points at a build
+that has it).
 
 ## Before submitting a PR
 
 ```bash
-cd client
 pnpm run lint
 pnpm run test
 pnpm run build
@@ -40,8 +42,10 @@ pnpm run build
 All three must pass — CI runs the same three commands on every PR. If
 you're changing pure logic (timeline math, transcript mapping, ffmpeg
 argument/filter-string building, validation, path handling), add or update
-a test in the matching `*.test.ts` file rather than only checking it by
-hand — `pnpm run test:watch` re-runs on save.
+a test in the matching `*.test.ts` file in whichever package (`client/` or
+`server/`) owns that code, rather than only checking it by hand --
+`pnpm --filter client test:watch` or `pnpm --filter server test:watch`
+re-runs on save.
 
 ## Project structure and conventions
 

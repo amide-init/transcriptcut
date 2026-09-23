@@ -1,0 +1,70 @@
+name: Build macOS App
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Runs beforeBuildCommand internally (builds the Vite client, then
+      # scripts/prepare-server-bundle.sh stages the backend) before
+      # compiling and bundling the Rust shell -- one command covers the
+      # whole pipeline, see client/src-tauri/tauri.conf.json.
+      - name: Build the Tauri app
+        working-directory: client
+        run: pnpm exec tauri build
+
+      - name: Zip the .app bundle
+        working-directory: client/src-tauri/target/release/bundle/macos
+        run: ditto -c -k --sequesterRsrc --keepParent "AI Video Editor.app" "AI-Video-Editor-macos-arm64.app.zip"
+
+      # Uploaded on every run (including workflow_dispatch) so the build
+      # can be verified end-to-end -- downloaded from the run's own
+      # artifacts -- before this workflow is ever allowed to touch a real
+      # public release.
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-app
+          path: |
+            client/src-tauri/target/release/bundle/macos/AI-Video-Editor-macos-arm64.app.zip
+            client/src-tauri/target/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+
+      # Only attaches to a public GitHub Release when this run was
+      # actually triggered by a version tag push -- a manual
+      # workflow_dispatch run never touches the public releases page.
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            client/src-tauri/target/release/bundle/macos/AI-Video-Editor-macos-arm64.app.zip
+            client/src-tauri/target/release/bundle/dmg/*.dmg

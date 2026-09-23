@@ -1,18 +1,20 @@
 #!/usr/bin/env bash
 #
 # One-shot setup for running this project on macOS: installs Node/pnpm/
-# ffmpeg-full via Homebrew if missing, installs JS deps, generates the
-# Prisma client, and creates client/.env (with FFMPEG_PATH pre-filled and
-# an interactive OPENAI_API_KEY prompt) if one doesn't already exist.
+# Bun/ffmpeg-full via Homebrew (Bun via its own official installer, see
+# below) if missing, installs JS deps for the whole workspace, generates
+# the server's Prisma client, and creates server/.env (with FFMPEG_PATH
+# pre-filled and an interactive OPENAI_API_KEY prompt) if one doesn't
+# already exist.
 #
 # Safe to re-run -- every step checks before it acts, and an existing
-# client/.env is never overwritten.
+# server/.env is never overwritten.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-CLIENT_DIR="$REPO_ROOT/client"
+SERVER_DIR="$REPO_ROOT/server"
 
 step() { printf '\n==> %s\n' "$1"; }
 
@@ -72,6 +74,23 @@ else
   brew install pnpm
 fi
 
+step "Checking for Bun"
+if command -v bun &>/dev/null; then
+  echo "Found Bun $(bun -v)."
+else
+  # Bun's own installer, not Homebrew: the Homebrew formula requires
+  # compiling a native dependency (better-sqlite3, transitively) against
+  # Xcode Command Line Tools, and fails on a CLT version that's gone
+  # stale relative to the current macOS/Xcode release -- a common state
+  # on a machine that hasn't run a manual CLT update in a while. Bun's
+  # installer just downloads a prebuilt binary, sidestepping that
+  # entirely (see https://bun.sh).
+  echo "Installing Bun via its official installer..."
+  curl -fsSL https://bun.sh/install | bash
+  export PATH="$HOME/.bun/bin:$PATH"
+  echo "Installed Bun $(bun -v). Open a new terminal (or re-source your shell rc) to get 'bun' on PATH permanently."
+fi
+
 step "Checking ffmpeg has subtitle burn-in (libass) support"
 ffmpeg_path_override=""
 if command -v ffmpeg &>/dev/null && ffmpeg -filters 2>/dev/null | grep -qw subtitles; then
@@ -88,19 +107,19 @@ else
   ffmpeg_path_override="$(brew --prefix ffmpeg-full)/bin/ffmpeg"
 fi
 
-step "Installing JS dependencies"
-(cd "$CLIENT_DIR" && pnpm install)
+step "Installing JS dependencies (client + server workspace)"
+(cd "$REPO_ROOT" && pnpm install)
 
 step "Generating the Prisma client"
-(cd "$CLIENT_DIR" && pnpm exec prisma generate)
+(cd "$SERVER_DIR" && bunx prisma generate)
 
-step "Setting up client/.env"
-env_file="$CLIENT_DIR/.env"
+step "Setting up server/.env"
+env_file="$SERVER_DIR/.env"
 if [ -f "$env_file" ]; then
-  echo "client/.env already exists -- leaving it as-is."
+  echo "server/.env already exists -- leaving it as-is."
 else
-  cp "$CLIENT_DIR/.env.example" "$env_file"
-  echo "Created client/.env from .env.example."
+  cp "$SERVER_DIR/.env.example" "$env_file"
+  echo "Created server/.env from .env.example."
 
   if [ -n "$ffmpeg_path_override" ]; then
     set_env_var "$env_file" \
@@ -110,13 +129,13 @@ else
   fi
 
   openai_key_input=""
-  read -rsp "Paste your OpenAI API key (used server-side only; Enter to skip and edit client/.env by hand later): " openai_key_input || true
+  read -rsp "Paste your OpenAI API key (used server-side only; Enter to skip and edit server/.env by hand later): " openai_key_input || true
   echo
   if [ -n "$openai_key_input" ]; then
     set_env_var "$env_file" "OPENAI_API_KEY=sk-..." "OPENAI_API_KEY=$openai_key_input"
-    echo "Set OPENAI_API_KEY in client/.env."
+    echo "Set OPENAI_API_KEY in server/.env."
   else
-    echo "Skipped -- transcription and AI features won't work until you set OPENAI_API_KEY in client/.env."
+    echo "Skipped -- transcription and AI features won't work until you set OPENAI_API_KEY in server/.env."
   fi
 fi
 
@@ -124,8 +143,8 @@ step "Done"
 cat <<EOF
 Next:
 
-  cd client
   pnpm run dev
 
-Then open http://localhost:3000
+This starts both the Vite client and the Bun backend together. Then open
+http://localhost:5173
 EOF

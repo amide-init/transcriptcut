@@ -18,6 +18,17 @@ If you want to self-host this on a VPS, a container, or a home server,
 that should work by pointing `DATA_DIR` at a persistent volume — no
 rewrite required.
 
+## Two processes, one dev command
+
+`client/` is a Vite + React SPA (no server-side rendering); `server/` is
+a Bun + Hono backend serving the REST API, FFmpeg, Prisma/SQLite, and
+the OpenAI calls. They run as separate processes, started together by
+`pnpm run dev` from the repo root, with Vite proxying `/api/*` to the
+backend in development. This split — one deployable backend unit, no
+server-rendering step to work around — is also what makes the native
+macOS app possible: the packaged app spawns the same Bun server as a
+child process and points a Tauri window at it. See [Download](/download).
+
 ## Data on disk
 
 ```text

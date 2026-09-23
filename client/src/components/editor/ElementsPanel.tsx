@@ -79,7 +79,6 @@ export function ElementsPanel() {
         {logoUrl && (
           <div className="flex items-center gap-2 rounded-lg border border-border p-2">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded bg-muted">
-              {/* eslint-disable-next-line @next/next/no-img-element -- served from local storage, not a static asset Next can optimize */}
               <img src={logoUrl} alt="" className="max-h-full max-w-full object-contain" />
             </div>
             <Button
