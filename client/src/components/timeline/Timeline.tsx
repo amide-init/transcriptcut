@@ -164,7 +164,6 @@ export function Timeline() {
                 title={`${r.start.toFixed(1)}s – ${r.end.toFixed(1)}s`}
               >
                 {thumbnails[i]?.map((src, k) => (
-                  // eslint-disable-next-line @next/next/no-img-element -- locally generated data URL, not a static asset
                   <img
                     key={k}
                     src={src}

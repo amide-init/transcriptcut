@@ -28,7 +28,6 @@ export function FiltersPanel() {
     try {
       // Reading a frame via canvas is an imperative browser-API call, not
       // state derivable from props/state, so it has to happen in an effect.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setThumbnail(canvas.toDataURL("image/jpeg", 0.85));
     } catch {
       setThumbnail(null);
@@ -50,7 +49,6 @@ export function FiltersPanel() {
           >
             <div className="aspect-video w-full overflow-hidden rounded bg-muted">
               {thumbnail ? (
-                // eslint-disable-next-line @next/next/no-img-element -- locally generated data URL, not a static asset
                 <img
                   src={thumbnail}
                   alt=""

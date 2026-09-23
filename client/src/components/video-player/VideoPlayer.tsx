@@ -293,7 +293,6 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
           data-playing={isPlaying}
         />
         {logoUrl && (
-          // eslint-disable-next-line @next/next/no-img-element -- served from local storage, not a static asset Next can optimize
           <img
             src={logoUrl}
             alt=""
