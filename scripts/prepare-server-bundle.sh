@@ -80,18 +80,21 @@ if [ ! -d "$CLIENT_DIR/dist" ]; then
 fi
 cp -R "$CLIENT_DIR"/dist "$OUT_DIR"/client-dist
 
+# Deliberately not copying server/.env into the bundle: OPENAI_API_KEY
+# now comes from settings.json (written by the app's own first-run setup
+# screen, see server/src/lib/settings.ts), not a build-time file -- a
+# real distributable build must never ship with the developer's own key
+# baked in. Every other env var the server needs (DATABASE_URL, DATA_DIR,
+# PORT, CORS_ORIGIN, FFMPEG_PATH) is already set explicitly by
+# client/src-tauri/src/lib.rs's spawn call, which overrides whatever a
+# bundled .env would have provided anyway -- so there's nothing left for
+# a bundled .env to actually do.
+
 step "Bootstrapping a pre-migrated empty app.db template"
 TMP_DIR="$(mktemp -d)"
 TMP_DB="$TMP_DIR/app.db"
 (cd "$SERVER_DIR" && DATABASE_URL="file:$TMP_DB" bunx prisma migrate deploy)
 cp "$TMP_DB" "$OUT_DIR"/app.db.template
 rm -rf "$TMP_DIR"
-
-step "Copying server/.env (OPENAI_API_KEY etc. -- stays inside the built .app, personal use only)"
-if [ ! -f "$SERVER_DIR/.env" ]; then
-  echo "server/.env is missing -- copy server/.env.example to server/.env and fill it in first." >&2
-  exit 1
-fi
-cp "$SERVER_DIR"/.env "$OUT_DIR"/.env
 
 step "Done: $OUT_DIR (run with: cd $OUT_DIR && bun run src/index.ts)"

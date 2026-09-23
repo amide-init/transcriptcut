@@ -7,10 +7,7 @@
     "frontendDist": "http://localhost:3001",
     "devUrl": "http://localhost:5173",
     "beforeDevCommand": "pnpm dev",
-    "beforeBuildCommand": {
-      "script": "pnpm --filter client build && bash scripts/prepare-server-bundle.sh",
-      "cwd": "/Users/aminuddin/Desktop/pluto/text2video"
-    }
+    "beforeBuildCommand": "cd .. && pnpm --filter client build && bash scripts/prepare-server-bundle.sh"
   },
   "app": {
     "windows": [
@@ -31,7 +28,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["app"],
+    "targets": ["app", "dmg"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
