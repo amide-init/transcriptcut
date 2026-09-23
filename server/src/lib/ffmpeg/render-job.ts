@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/db/client";
 import { resolveInDataDir, statAsset } from "@/lib/storage/local";
 import { computePlayableRanges } from "@/lib/timeline/cuts";
@@ -114,7 +115,7 @@ export async function runRenderJob(
       data: { status: "completed", outputPath: outputRelativePath, error: null },
     });
   } catch (err) {
-    console.error(`Render job ${jobId} failed:`, err);
+    logger.error(`Render job ${jobId} failed:`, err);
     await prisma.renderJob.update({
       where: { id: jobId },
       data: {

@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/db/client";
 import { resolveInDataDir } from "@/lib/storage/local";
 import { transcribeFile } from "@/lib/ai/transcribe";
@@ -42,7 +43,7 @@ transcribeRoute.post("/:id/transcribe", async (c) => {
 
     return c.json({ success: true, transcript });
   } catch (err) {
-    console.error("Transcription failed:", err);
+    logger.error("Transcription failed:", err);
     return errorResponse(c, "TRANSCRIPTION_FAILED", "The video could not be transcribed. Please try again.", 502);
   }
 });
