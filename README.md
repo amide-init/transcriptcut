@@ -116,21 +116,26 @@ Open [http://localhost:5173](http://localhost:5173). See
 [`server/.env.example`](./server/.env.example) for what each variable
 does, and [`CONTRIBUTING.md`](./CONTRIBUTING.md) for more.
 
-### macOS app
+### Download
 
-A native `.app` build also exists (Tauri), currently scoped to personal
-use on your own Apple Silicon Mac — ad-hoc signed, no Apple Developer
-account needed, not meant for distributing to others yet:
+A native macOS app is also available (Apple Silicon only) — no need to
+clone the repo or run anything. Grab it from the
+**[docs download page](https://amide-init.github.io/transcriptcut/download)**,
+which also covers the one-time Gatekeeper step (this build is ad-hoc
+signed, not signed with a paid Apple Developer account) and the
+first-launch API key setup.
+
+To build it yourself instead:
 
 ```bash
 cd client
 pnpm exec tauri build
 ```
 
-Produces `client/src-tauri/target/release/bundle/macos/AI Video Editor.app`
-— right-click → Open the first time to clear Gatekeeper's unsigned-app
-warning. See `claude.md` section 35 for how it's wired together and its
-current constraints.
+Produces `client/src-tauri/target/release/bundle/{macos,dmg}/`. See
+`claude.md` section 35 for how it's wired together, and
+[`.github/workflows/build-macos-app.yml`](./.github/workflows/build-macos-app.yml)
+for how CI builds and releases it on a version tag push.
 
 ## Testing
 

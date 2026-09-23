@@ -1303,12 +1303,15 @@ with the same care as the code itself.
 # 35. Mac App Packaging (Tauri)
 
 A native macOS `.app` build exists at `client/src-tauri/`, wrapping the
-Vite client + Bun backend with Tauri v2. **Scope of the current build:
-personal use on this machine only** — ad-hoc signed (no paid Apple
-Developer account), Apple Silicon (arm64) only, no notarization, not
-meant for distribution to other people or other Macs. Extending it to
-real distribution (Developer ID signing, notarization, universal
-builds) is a legitimate future step, not something to add speculatively.
+Vite client + Bun backend with Tauri v2, built and released via CI
+(`.github/workflows/build-macos-app.yml`) and downloadable from the
+docs site. **Scope: ad-hoc signed (no paid Apple Developer account),
+Apple Silicon (arm64) only, no notarization** — a deliberate choice,
+not an oversight: downloaders hit Gatekeeper's "unidentified
+developer" warning and need to right-click → Open once (documented on
+the download page). Real Developer ID signing + notarization + a
+universal (Intel) build are legitimate future steps, not something to
+add speculatively.
 
 ## Architecture
 
@@ -1327,24 +1330,27 @@ app — a non-issue for this personal-use-only scope.
   the backend at repo-root `server-bundle/` (gitignored): server
   source (unbundled — Bun runs `.ts` directly), a **hoisted** (flat,
   npm-style, zero symlinks) `node_modules`, the generated Prisma
-  client, the built Vite client, a pre-migrated empty `app.db.template`,
-  and a copy of `server/.env`. The node-linker choice matters: pnpm's
-  default nested/symlinked `node_modules` (even via `pnpm deploy`,
-  which does correctly resolve the full dependency graph) breaks once
-  Tauri's own resource-bundler copies it into the `.app` — confirmed
-  empirically that Tauri's copy step silently drops directories only
-  reachable via a symlink. `pnpm install --config.node-linker=hoisted`
-  avoids the problem at the source instead of working around Tauri's
-  copier.
+  client, the built Vite client, and a pre-migrated empty
+  `app.db.template`. The node-linker choice matters: pnpm's default
+  nested/symlinked `node_modules` (even via `pnpm deploy`, which does
+  correctly resolve the full dependency graph) breaks once Tauri's own
+  resource-bundler copies it into the `.app` — confirmed empirically
+  that Tauri's copy step silently drops directories only reachable via
+  a symlink. `pnpm install --config.node-linker=hoisted` avoids the
+  problem at the source instead of working around Tauri's copier.
+  **`server/.env` is deliberately never copied into the bundle** — see
+  the OpenAI API key note below.
 * `client/src-tauri/tauri.conf.json`'s `build.frontendDist` is a URL
   (`http://localhost:3001`), not a static path — the packaged app's
   window loads directly from the spawned Bun server, which serves both
   the built static client and the `/api/*` routes on one origin,
   exactly like the dev proxy does. `beforeBuildCommand` builds the
-  client and runs the staging script, with an **explicit absolute
-  `cwd`** (not a relative `cd ../..`) — Tauri hook commands run from
-  the frontend package directory (`client/`), one level shallower than
-  it looks from `src-tauri/`'s own location.
+  client and runs the staging script (`cd .. && pnpm --filter client
+  build && bash scripts/prepare-server-bundle.sh`) — Tauri hook
+  commands run from the frontend package directory (`client/`), so
+  `cd ..` alone reaches the repo root; an earlier version of this
+  config had an absolute machine-specific path here instead, which
+  worked locally but would have failed on any CI runner.
 * `client/src-tauri/src/lib.rs`'s `setup()` hook resolves
   `resource_dir()`/`app_data_dir()`, seeds the database from
   `app.db.template` on first launch only (never overwrites existing
@@ -1364,19 +1370,43 @@ cd client
 pnpm exec tauri build
 ```
 
-Produces `client/src-tauri/target/release/bundle/macos/AI Video Editor.app`.
+Produces both `client/src-tauri/target/release/bundle/macos/AI Video
+Editor.app` and a `.dmg` alongside it (`bundle.targets` includes both).
 Since it's ad-hoc signed rather than signed with a real Developer ID,
 launch it with right-click → Open the first time (a plain double-click
-triggers Gatekeeper's "unidentified developer" block).
+triggers Gatekeeper's "unidentified developer" block) — this applies
+whether you built it yourself or downloaded a release.
 
-## Known constraints of this round
+CI (`.github/workflows/build-macos-app.yml`) runs this same command on
+`macos-latest` for every `v*.*.*` tag push, uploads the result as a
+workflow artifact on every run (including manual `workflow_dispatch`,
+for testing without touching anything public), and additionally
+attaches it to the matching GitHub Release when the run was a real tag
+push. No Apple secrets needed — ad-hoc signing requires no certificate
+or notarization credentials.
+
+## The OpenAI API key
+
+Not baked into the build. Each person who runs the app (whether built
+locally or downloaded) is asked for their own key on first launch —
+see `server/src/lib/settings.ts` (`DATA_DIR/settings.json`, checked
+before falling back to `server/.env`'s `OPENAI_API_KEY` for local dev)
+and `client/src/routes/SetupRoute.tsx`. An earlier version of this
+build did copy `server/.env` — including a real key — into every
+bundle; that was fine while builds never left the developer's own
+machine, but had to change once the app became publicly downloadable,
+since anyone could otherwise have extracted the key from the bundle.
+
+## Known constraints
 
 * App data lives at `~/Library/Application Support/com.local.aivideoeditor/`,
   separate from whatever's in `server/data/` during local dev — the
   packaged app starts with an empty project list on first launch, not
   a copy of your dev data.
-* `FFMPEG_PATH` and the `bun` executable path are both hardcoded
-  absolute paths in `lib.rs` (matching this machine's Homebrew/Bun
-  install locations) — a deliberate simplicity trade for
-  personal-use-only scope, not something to generalize until this
-  needs to run on a different machine.
+* `FFMPEG_PATH` and the `bun` executable path are hardcoded in
+  `lib.rs` to the standard Homebrew/Bun install locations on any
+  Apple Silicon Mac (`/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg`,
+  `~/.bun/bin/bun`) — not this-machine-specific, but they are real
+  prerequisites: anyone running the app (built locally or downloaded)
+  needs Bun and Homebrew's `ffmpeg-full` already installed, documented
+  on the docs site's download page.
