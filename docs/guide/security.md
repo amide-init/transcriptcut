@@ -41,10 +41,13 @@ behind a cloud API boundary.
 - `.env` is gitignored and must never be committed — this is worth
   double-checking by eye before every commit, not just trusted to
   `.gitignore`.
-- Your LLM provider API key is used server-side only (in Next.js API
-  route handlers). It's never sent to the browser.
+- Your LLM provider API key is used server-side only (in the Bun/Hono
+  backend). It's never sent to the browser.
 - `.env.example` documents every variable without real values, so
   contributors know what to fill in.
+- The macOS app doesn't bake a key into the build — each person enters
+  their own on first launch, stored only in that app's local data
+  directory. See [Download](/download).
 
 ## If you're contributing
 
