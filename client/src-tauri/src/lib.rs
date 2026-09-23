@@ -86,6 +86,22 @@ pub fn run() {
                             log::info!("[server] {line}");
                             if line.contains("server listening") {
                                 if let Some(w) = handle2.get_webview_window("main") {
+                                    // The webview starts loading frontendDist
+                                    // (http://localhost:PORT) as soon as it's
+                                    // created -- almost certainly before the
+                                    // server has finished starting, so that
+                                    // first load fails and the window is left
+                                    // showing a blank page. Just calling
+                                    // show() here does NOT retry that load --
+                                    // confirmed by testing the built .app,
+                                    // not just curling the server directly
+                                    // (which proves the server works but
+                                    // says nothing about what the webview
+                                    // itself rendered). Explicitly navigate
+                                    // now that the server is actually up.
+                                    if let Ok(url) = tauri::Url::parse(&format!("http://localhost:{PORT}")) {
+                                        let _ = w.navigate(url);
+                                    }
                                     let _ = w.show();
                                 }
                             }
