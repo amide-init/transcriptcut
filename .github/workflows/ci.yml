@@ -9,9 +9,6 @@ on:
 jobs:
   lint-and-build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: client
     steps:
       - uses: actions/checkout@v4
 
@@ -23,13 +20,18 @@ jobs:
         with:
           node-version: 20
           cache: pnpm
-          cache-dependency-path: client/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Generate Prisma client
-        run: pnpm exec prisma generate
+      - name: Generate Prisma client (server)
+        working-directory: server
+        run: bunx prisma generate
 
       - name: Lint
         run: pnpm run lint
@@ -40,9 +42,9 @@ jobs:
       - name: Build
         run: pnpm run build
         env:
-          # Not required anymore (lib/ai/{transcribe,filler-words}.ts now
-          # construct their OpenAI client lazily on first call, not at
-          # module load, so `next build` succeeds even with this unset) --
-          # kept as defense-in-depth against that regressing back to eager
-          # construction. Not a real secret, no API calls happen during build.
+          # Not required for the build itself (lib/ai/{transcribe,filler-words}.ts
+          # construct their OpenAI client lazily, only on first real call --
+          # nothing at build time imports/executes that code) -- kept as
+          # defense-in-depth in case that ever regresses. Not a real secret,
+          # no API calls happen during build.
           OPENAI_API_KEY: dummy-key-for-ci-build-only
