@@ -23,7 +23,7 @@ transcribeRoute.post("/:id/transcribe", async (c) => {
     where: { projectId: id, status: { in: ["queued", "processing"] } },
   });
   if (running) {
-    return errorResponse(c, "ALREADY_TRANSCRIBING", "This project is already being transcribed.", 409);
+    return errorResponse(c, "ALREADY_TRANSCRIBING", "This project's transcript is already being processed.", 409);
   }
 
   const job = await prisma.transcriptionJob.create({ data: { projectId: id, status: "queued" } });
@@ -40,7 +40,7 @@ transcribeRoute.get("/:id/transcribe/:jobId", async (c) => {
   const jobId = c.req.param("jobId");
 
   const job = await prisma.transcriptionJob.findUnique({ where: { id: jobId } });
-  if (!job || job.projectId !== id) {
+  if (!job || job.projectId !== id || job.kind !== "transcribe") {
     return errorResponse(c, "NOT_FOUND", "Transcription job not found.", 404);
   }
 
