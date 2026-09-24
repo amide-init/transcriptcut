@@ -15,6 +15,8 @@ import { captionsRoute } from "@/routes/captions";
 import { logoRoute } from "@/routes/logo";
 import { renderRoute } from "@/routes/render";
 import { settingsRoute } from "@/routes/settings";
+import { prisma } from "@/lib/db/client";
+import { getMaxUploadBytes } from "@/lib/limits";
 
 const app = new Hono();
 
@@ -50,14 +52,22 @@ if (existsSync(clientDistDir)) {
   app.get("*", serveStatic({ root: clientDistDir, path: "index.html" }));
 }
 
+// Jobs run in-process, so any still "queued"/"processing" at startup were
+// interrupted by a restart and will never finish -- mark them failed so the
+// client stops polling and a retry isn't blocked as "already running".
+await prisma.transcriptionJob.updateMany({
+  where: { status: { in: ["queued", "processing"] } },
+  data: { status: "failed", error: "Interrupted by a server restart. Please try again." },
+});
+
 const port = Number(process.env.PORT ?? 3001);
 logger.info(`server listening on :${port}`);
 
 export default {
   port,
   fetch: app.fetch,
-  // Video uploads can be hundreds of MB -- raise Bun's default request body
-  // size ceiling to match the upload route's own 500MB cap (see
-  // src/routes/upload.ts) instead of relying on Bun's built-in default.
-  maxRequestBodySize: 500 * 1024 * 1024,
+  // Video uploads can be many GB -- raise Bun's default request body size
+  // ceiling to match the upload route's own cap (see src/lib/limits.ts)
+  // instead of relying on Bun's built-in default.
+  maxRequestBodySize: getMaxUploadBytes(),
 };

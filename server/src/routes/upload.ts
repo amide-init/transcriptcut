@@ -2,10 +2,9 @@ import { Hono } from "hono";
 import { prisma } from "@/lib/db/client";
 import { writeAssetStream } from "@/lib/storage/local";
 import { errorResponse } from "@/lib/http";
+import { getMaxUploadBytes } from "@/lib/limits";
 
 export const uploadRoute = new Hono();
-
-const MAX_FILE_BYTES = 500 * 1024 * 1024; // 500MB local upload cap
 
 /**
  * POST /api/projects/:id/upload?filename=video.mp4
@@ -40,11 +39,12 @@ uploadRoute.post("/:id/upload", async (c) => {
   if (!Number.isFinite(contentLength) || contentLength <= 0) {
     return errorResponse(c, "MISSING_CONTENT_LENGTH", "A Content-Length header is required.", 400);
   }
-  if (contentLength > MAX_FILE_BYTES) {
+  const maxBytes = getMaxUploadBytes();
+  if (contentLength > maxBytes) {
     return errorResponse(
       c,
       "FILE_TOO_LARGE",
-      `File exceeds the ${MAX_FILE_BYTES / (1024 * 1024)}MB upload limit.`,
+      `File exceeds the ${Math.round(maxBytes / (1024 * 1024))}MB upload limit.`,
       413
     );
   }
@@ -56,8 +56,9 @@ uploadRoute.post("/:id/upload", async (c) => {
 
   const { relativePath, sizeBytes } = await writeAssetStream(id, "original", filename, body);
 
-  // Only one "original" asset per project for v1 -- replace any previous one.
-  await prisma.asset.deleteMany({ where: { projectId: id, kind: "original" } });
+  // Only one "original" asset per project for v1 -- replace any previous one,
+  // along with the audio track extracted from it.
+  await prisma.asset.deleteMany({ where: { projectId: id, kind: { in: ["original", "audio"] } } });
   const asset = await prisma.asset.create({
     data: {
       projectId: id,
