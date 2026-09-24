@@ -178,6 +178,28 @@ export function buildAudioOnlyRenderArgs(args: {
 }
 
 /**
+ * Crop to the target aspect ratio (full height, sliding horizontally by
+ * cropX, when the source is wider; full width, centered vertically, when it
+ * is taller), then scale to the exact output size. Every value is a
+ * validated number, and the expression quoting keeps its commas inside the
+ * filter option.
+ */
+function buildReframeFilter({ width, height, cropX }: { width: number; height: number; cropX: number }): string {
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0 || width > 4096 || height > 4096) {
+    throw new Error(`Invalid reframe size: ${width}x${height}`);
+  }
+  if (!Number.isFinite(cropX)) throw new Error("Invalid crop position.");
+  const ratio = (width / height).toFixed(6);
+  const x = Math.min(1, Math.max(0, cropX)).toFixed(4);
+  const even = (expr: string) => `trunc((${expr})/2)*2`;
+  return (
+    `crop=w='${even(`if(gt(iw/ih,${ratio}),ih*${ratio},iw)`)}'` +
+    `:h='${even(`if(gt(iw/ih,${ratio}),ih,iw/${ratio})`)}'` +
+    `:x='(iw-ow)*${x}':y='(ih-oh)/2',scale=${width}:${height},setsar=1`
+  );
+}
+
+/**
  * Builds the full ffmpeg argv (as an array, never a shell string) for
  * rendering a project: cut out everything except the playable ranges
  * (the same ranges the browser preview computes via
@@ -233,6 +255,14 @@ export function buildRenderArgs(args: {
   audioFilter?: string | null;
   /** FFMETADATA file with the episode title and chapter markers to embed (see buildAudioOnlyRenderArgs). */
   metadataPath?: string;
+  /**
+   * Reframe to a different output size (clips: 9:16, 1:1...), cropping the
+   * source to the target aspect first. cropX (0..1) picks the horizontal
+   * position when the source is wider than the target. Applied before
+   * captions and logo, so those are laid out on the reframed frame --
+   * callers pass the output size as videoWidth/videoHeight.
+   */
+  reframe?: { width: number; height: number; cropX: number };
 }): string[] {
   const {
     inputPath,
@@ -251,6 +281,7 @@ export function buildRenderArgs(args: {
     videoHeight,
     audioFilter,
     metadataPath,
+    reframe,
   } = args;
 
   assertValidRanges(playableRanges);
@@ -301,6 +332,11 @@ export function buildRenderArgs(args: {
   if (colorFilter) {
     filterChains.push(`[outv]${colorFilter}[filtered]`);
     videoOutLabel = "[filtered]";
+  }
+
+  if (reframe) {
+    filterChains.push(`${videoOutLabel}${buildReframeFilter(reframe)}[reframed]`);
+    videoOutLabel = "[reframed]";
   }
 
   if (srtPath) {
