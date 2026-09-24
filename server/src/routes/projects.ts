@@ -96,6 +96,7 @@ projectsRoute.get("/:id", async (c) => {
       burnInCaptions: project.burnInCaptions,
       captionStyle: project.captionStyleJson ? JSON.parse(project.captionStyleJson) : null,
       properties: project.propertiesJson ? JSON.parse(project.propertiesJson) : null,
+      audioSettings: project.audioSettingsJson ? JSON.parse(project.audioSettingsJson) : null,
       logoPosition: project.logoPosition,
       logoPaddingX: project.logoPaddingX,
       logoPaddingY: project.logoPaddingY,
