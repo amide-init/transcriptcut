@@ -604,6 +604,22 @@ cuts don't strand them. Every export (MP4, and MP3 at 44.1kHz/192k) embeds
 the episode title and chapters via a generated FFMETADATA file; WAV can't
 hold chapters. AI output never changes the edit.
 
+## Speaker detection
+
+An explicit "Detect speakers" action, not part of transcription: the
+diarization model (`gpt-4o-transcribe-diarize`, behind `lib/ai/diarize.ts`)
+runs at about half real time. It returns speaker-labeled spans but no word
+timings, so Whisper stays the source of truth for words; diarization only
+decides who said each word (`lib/ai/speakers.ts#assignSpeakers`), splitting
+segments where the speaker changes. Labels are only consistent within one
+API call, so `lib/ai/diarization-job.ts` keeps them consistent across
+~10-minute chunks two ways: reference clips of the first chunk's voices
+(`known_speaker_names`), and a 45s overlap between chunks used to match any
+label the references missed. Results land in the existing `segment.speaker`
+field ("Speaker 1", ...), so captions, exports and show notes use them with
+no changes. Cutting a speaker is ordinary cut operations. Known limit:
+similar-sounding voices can merge into one speaker.
+
 ---
 
 # 13. Architecture (local-first)
@@ -862,6 +878,10 @@ GET    /api/projects/:id/publishing                 (chapters on the edited time
 POST   /api/projects/:id/publishing/chapters        (AI-generate)   PUT (save user edits)
 POST   /api/projects/:id/publishing/show-notes      (AI-generate)   PUT (save user edits)
 GET    /api/projects/:id/transcript/export?format=txt|md
+
+POST   /api/projects/:id/speakers/detect         (202 + jobId; background speaker detection)
+GET    /api/projects/:id/speakers/detect/:jobId
+POST   /api/projects/:id/speakers/rename         ({from, to|null} on every segment)
 ```
 
 (No `POST /api/projects/:id/ai/edit` — the free-text AI command bar this
