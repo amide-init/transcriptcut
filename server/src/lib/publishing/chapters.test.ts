@@ -12,6 +12,7 @@ import type { EditedSentence } from "@/lib/publishing/edited-transcript";
 // One sentence every 20s; source time = edited time + 5 (a 5s cut at the very start).
 const sentences: EditedSentence[] = Array.from({ length: 30 }, (_, i) => ({
   sourceStart: i * 20 + 5,
+  sourceEnd: i * 20 + 20,
   start: i * 20,
   end: i * 20 + 15,
   text: `Sentence ${i}.`,
@@ -56,9 +57,9 @@ describe("chaptersFromPicks", () => {
 
   it("merges chapters closer than 10s on the edited timeline into the earlier one", () => {
     const close: EditedSentence[] = [
-      { sourceStart: 0, start: 0, end: 4, text: "a" },
-      { sourceStart: 5, start: 5, end: 9, text: "b" },
-      { sourceStart: 30, start: 30, end: 34, text: "c" },
+      { sourceStart: 0, sourceEnd: 4, start: 0, end: 4, text: "a" },
+      { sourceStart: 5, sourceEnd: 9, start: 5, end: 9, text: "b" },
+      { sourceStart: 30, sourceEnd: 34, start: 30, end: 34, text: "c" },
     ];
     const chapters = chaptersFromPicks(
       [

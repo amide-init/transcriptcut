@@ -7,6 +7,8 @@ import type { Transcript } from "@/types/transcript";
 export type EditedSentence = {
   /** Source-timeline start of the first surviving word -- what chapters store. */
   sourceStart: number;
+  /** Source-timeline end of the last surviving word -- what clips store. */
+  sourceEnd: number;
   /** Edited-timeline start/end -- what the listener hears. */
   start: number;
   end: number;
@@ -33,6 +35,7 @@ export function buildEditedSentences(transcript: Transcript, cuts: CutOperation[
       if (end <= start) continue;
       sentences.push({
         sourceStart: words[0].start,
+        sourceEnd: words[words.length - 1].end,
         start,
         end,
         text: words.map((w) => w.text).join(" ").trim(),
