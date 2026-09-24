@@ -18,6 +18,54 @@ type WhisperVerboseResponse = {
 };
 
 /**
+ * Puts every Whisper word into exactly one segment: the one its time range
+ * overlaps most, or, for a word that falls in a gap between segments, the
+ * nearest one. Word and segment timestamps come from separate passes and
+ * routinely disagree by a fraction of a second at segment edges -- measured:
+ * "Thanks" at 6.40-6.70s, its segment starting at 6.68s. The previous rule
+ * (word must fit entirely inside a segment) put such words in no segment at
+ * all, silently dropping ~1% of words from a conversational transcript and
+ * shifting sentence boundaries in every affected segment.
+ *
+ * Assignments never go backwards, so word order is preserved, and each
+ * segment's bounds grow to cover its words.
+ */
+export function groupWordsIntoSegments(
+  words: TranscriptWord[],
+  rawSegments: { start: number; end: number; text: string }[]
+): TranscriptSegment[] {
+  const buckets: TranscriptWord[][] = rawSegments.map(() => []);
+  let floor = 0;
+  for (const word of words) {
+    let best = floor;
+    let bestScore = -Infinity;
+    for (let i = floor; i < rawSegments.length; i++) {
+      const seg = rawSegments[i];
+      // Positive = seconds of overlap; negative = distance to the segment.
+      const score = Math.min(word.end, seg.end) - Math.max(word.start, seg.start);
+      if (score > bestScore) {
+        bestScore = score;
+        best = i;
+      }
+      if (seg.start > word.end && score < bestScore) break;
+    }
+    buckets[best].push(word);
+    floor = best;
+  }
+
+  return rawSegments.map((seg, i) => {
+    const segWords = buckets[i];
+    return {
+      id: `segment-${i}`,
+      start: segWords.length ? Math.min(seg.start, segWords[0].start) : seg.start,
+      end: segWords.length ? Math.max(seg.end, segWords[segWords.length - 1].end) : seg.end,
+      text: seg.text.trim(),
+      words: segWords,
+    };
+  });
+}
+
+/**
  * Transcribes a video/audio file with word-level timestamps via OpenAI Whisper,
  * and groups the words into sentence-like segments.
  */
@@ -38,13 +86,7 @@ export async function transcribeFile(file: File): Promise<Transcript> {
 
   const rawSegments = response.segments ?? [];
   const segments: TranscriptSegment[] = rawSegments.length
-    ? rawSegments.map((seg, i) => ({
-        id: `segment-${i}`,
-        start: seg.start,
-        end: seg.end,
-        text: seg.text.trim(),
-        words: words.filter((w) => w.start >= seg.start && w.end <= seg.end + 0.05),
-      }))
+    ? groupWordsIntoSegments(words, rawSegments)
     : words.length
       ? [
           {
