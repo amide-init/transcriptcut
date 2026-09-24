@@ -580,6 +580,20 @@ child process on the same machine as everything else (see section 18).
 
 ---
 
+## Podcast audio cleanup
+
+Per-project `AudioSettings` (`server/src/types/audio-settings.ts`, stored as
+`Project.audioSettingsJson`): loudness target (off / -16 / -14 LUFS), noise
+reduction (afftdn), speaker leveling (dynaudnorm) and an 80Hz high-pass.
+Enums/booleans only, mapped to fixed filter strings in
+`lib/ffmpeg/audio-filters.ts`. Loudness is set by measured gain + a peak
+limiter at -2 dBTP, not loudnorm's linear mode (which silently falls back
+to dynamic mode and undershoots on peaky speech); `render-job.ts#resolveLoudnessGain`
+measures and corrects with secant steps. Defaults are all off, so exports
+are unchanged unless a user opts in.
+
+---
+
 # 13. Architecture (local-first)
 
 No cloud account is required to run or develop this project.
@@ -830,6 +844,7 @@ DELETE /api/projects/:id/operations/:operationId
 
 POST   /api/projects/:id/render
 GET    /api/projects/:id/render/:jobId
+POST   /api/projects/:id/render/audio-preview   (15s before/after sample of the audio settings)
 ```
 
 (No `POST /api/projects/:id/ai/edit` — the free-text AI command bar this

@@ -21,6 +21,8 @@ model Project {
   captionStyleJson String?
   /// JSON-serialized VideoProperties (see src/types/video-properties.ts), null = use the client default (all zero).
   propertiesJson String?
+  /// JSON-serialized AudioSettings (see src/types/audio-settings.ts), null = all processing off.
+  audioSettingsJson String?
 
   /// "top-left" | "top-right" | "bottom-left" | "bottom-right" -- see src/lib/video/logo.ts
   logoPosition String @default("bottom-right")
@@ -110,6 +112,8 @@ model RenderJob {
   projectId String
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
+  /// "export" (full MP4) | "audio-preview" (short before/after audio sample, see lib/ffmpeg/audio-preview.ts)
+  kind       String  @default("export")
   /// "queued" | "processing" | "completed" | "failed"
   status     String  @default("queued")
   outputPath String?

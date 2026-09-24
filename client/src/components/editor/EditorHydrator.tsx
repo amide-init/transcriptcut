@@ -10,6 +10,7 @@ import type { Transcript } from "@/types/transcript";
 import type { EditOperation } from "@/types/edit-operation";
 import type { CaptionStyle } from "@/lib/captions/style";
 import type { VideoProperties } from "@/types/video-properties";
+import type { AudioSettings } from "@/types/audio-settings";
 import type { LogoPosition } from "@/lib/video/logo";
 
 type HydrateProject = {
@@ -19,6 +20,7 @@ type HydrateProject = {
   burnInCaptions: boolean;
   captionStyle: CaptionStyle | null;
   properties: VideoProperties | null;
+  audioSettings: AudioSettings | null;
   logoPosition: LogoPosition;
   logoPaddingX: number;
   logoPaddingY: number;

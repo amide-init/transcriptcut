@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildRenderArgs } from "@/lib/ffmpeg/plan";
+import { buildLoudnessAnalysisArgs, buildRenderArgs } from "@/lib/ffmpeg/plan";
 import { DEFAULT_CAPTION_STYLE } from "@/lib/captions/style";
 import { DEFAULT_VIDEO_PROPERTIES } from "@/types/video-properties";
 
@@ -54,7 +54,8 @@ describe("buildRenderArgs: basic structure", () => {
     const filterComplex = argv[argv.indexOf("-filter_complex") + 1];
     expect(filterComplex).toContain("[0:v]trim=start=0.000:end=10.000,setpts=PTS-STARTPTS[v0]");
     expect(filterComplex).toContain("[0:a]atrim=start=0.000:end=10.000,asetpts=PTS-STARTPTS[a0]");
-    expect(filterComplex).toContain("[v0][a0]concat=n=1:v=1:a=1[outv][outa]");
+    expect(filterComplex).toContain("[v0]null[outv]");
+    expect(filterComplex).toContain("[a0]anull[outa]");
   });
 
   it("trims multiple playable ranges and crossfades across the cut between them", () => {
@@ -213,5 +214,49 @@ describe("buildRenderArgs: logo overlay", () => {
     const filterComplex = argv[argv.indexOf("-filter_complex") + 1];
     expect(argv).toContain("[logoed]");
     expect(filterComplex).toMatch(/\[captioned\]\[logosrc\]overlay=.*\[logoed\]/);
+  });
+});
+
+describe("buildRenderArgs: audio cleanup", () => {
+  it("maps the edited audio straight through when no audio filter is set", () => {
+    const argv = buildRenderArgs(baseArgs);
+    expect(argv[argv.indexOf("[outv]") + 2]).toBe("[outa]");
+    expect(argv.join(" ")).not.toContain("[cleana]");
+  });
+
+  it("applies the audio filter after the cuts and maps the cleaned stream", () => {
+    const argv = buildRenderArgs({ ...baseArgs, audioFilter: "highpass=f=80" });
+    const filterComplex = argv[argv.indexOf("-filter_complex") + 1];
+    expect(filterComplex).toContain("[outa]highpass=f=80[cleana]");
+    expect(argv).toEqual(expect.arrayContaining(["-map", "[cleana]"]));
+    expect(argv).not.toContain("[outa]");
+  });
+});
+
+describe("buildLoudnessAnalysisArgs", () => {
+  it("measures the edited audio only, with the same crossfades as the export, writing nothing", () => {
+    const playableRanges = [
+      { start: 0, end: 3 },
+      { start: 5, end: 8 },
+    ];
+    const argv = buildLoudnessAnalysisArgs({
+      inputPath: "/data/in.mp4",
+      playableRanges,
+      analysisChain: "loudnorm=I=-16:print_format=json",
+    });
+    const filterComplex = argv[argv.indexOf("-filter_complex") + 1];
+    expect(filterComplex).not.toContain("[0:v]");
+    expect(filterComplex).toContain("[a0][a1]acrossfade=d=0.030[outa]");
+    expect(filterComplex).toContain("[outa]loudnorm=I=-16:print_format=json[analysis]");
+    expect(argv.slice(-3)).toEqual(["-f", "null", "-"]);
+
+    const exportComplex = buildRenderArgs({ ...baseArgs, playableRanges });
+    expect(exportComplex[exportComplex.indexOf("-filter_complex") + 1]).toContain("[a0][a1]acrossfade=d=0.030[outa]");
+  });
+
+  it("rejects invalid ranges like the export does", () => {
+    expect(() =>
+      buildLoudnessAnalysisArgs({ inputPath: "/in.mp4", playableRanges: [], analysisChain: "loudnorm" })
+    ).toThrow(/entire video has been cut/);
   });
 });
