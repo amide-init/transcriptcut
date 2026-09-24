@@ -10,9 +10,12 @@ function initial(name: string): string {
 /** Inline speaker assign/rename for one transcript segment, per claude.md section 10. */
 export function SpeakerLabel({
   speaker,
+  color,
   onChange,
 }: {
   speaker?: string;
+  /** Tailwind background class for the initial bubble (see lib/transcript/speakers.ts). */
+  color?: string;
   onChange: (speaker: string | null) => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -56,7 +59,11 @@ export function SpeakerLabel({
     >
       {speaker ? (
         <>
-          <span className="flex size-4 items-center justify-center rounded-full bg-secondary text-[0.6rem] font-medium text-secondary-foreground">
+          <span
+            className={`flex size-4 items-center justify-center rounded-full text-[0.6rem] font-medium ${
+              color ? `${color} text-white` : "bg-secondary text-secondary-foreground"
+            }`}
+          >
             {initial(speaker)}
           </span>
           {speaker}
