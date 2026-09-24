@@ -620,6 +620,20 @@ field ("Speaker 1", ...), so captions, exports and show notes use them with
 no changes. Cutting a speaker is ordinary cut operations. Known limit:
 similar-sounding voices can merge into one speaker.
 
+## Clips / Shorts
+
+`Clip` rows are source-time ranges with an aspect (9:16, 1:1, 16:9), a
+horizontal crop position and a captions toggle. "Find highlights" is the
+one feature routed to GPT-5.6 Luna (`gpt-5.6-luna`, section 4: selecting
+important sections); like chapters, the model returns sentence indices,
+never times, and `lib/clips/clips.ts#highlightsFromPicks` enforces length
+(15-90s), whole sentences and no overlaps. A clip renders through the
+normal export as the project **plus two extra cuts** (everything before
+and after it), so the project's own edits and audio cleanup apply inside
+it; `plan.ts` then crops/scales to the clip frame, and captions are
+re-cut into 3-4 word Shorts cues laid out for that frame (the ASS script
+resolution must match the output aspect, or libass stretches glyphs).
+
 ---
 
 # 13. Architecture (local-first)
@@ -882,6 +896,11 @@ GET    /api/projects/:id/transcript/export?format=txt|md
 POST   /api/projects/:id/speakers/detect         (202 + jobId; background speaker detection)
 GET    /api/projects/:id/speakers/detect/:jobId
 POST   /api/projects/:id/speakers/rename         ({from, to|null} on every segment)
+
+GET    /api/projects/:id/clips
+POST   /api/projects/:id/clips/highlights        (GPT-5.6 Luna picks; replaces earlier AI picks)
+POST   /api/projects/:id/clips                   PATCH/DELETE /api/projects/:id/clips/:clipId
+(render a clip: POST /api/projects/:id/render with {clipId})
 ```
 
 (No `POST /api/projects/:id/ai/edit` — the free-text AI command bar this

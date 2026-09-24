@@ -306,3 +306,32 @@ describe("buildAudioOnlyRenderArgs", () => {
     expect(buildAudioOnlyRenderArgs(audio).join(" ")).toContain("-c:a aac -b:a 160k");
   });
 });
+
+describe("reframe", () => {
+  it("crops to the target aspect at cropX, then scales, before captions and logo", () => {
+    const argv = buildRenderArgs({
+      ...baseArgs,
+      srtPath: "/data/c.ass",
+      logoPath: "/data/logo.png",
+      logoPosition: "top-right",
+      videoWidth: 1080,
+      videoHeight: 1920,
+      reframe: { width: 1080, height: 1920, cropX: 0.25 },
+    });
+    const graph = argv[argv.indexOf("-filter_complex") + 1];
+    expect(graph).toContain(
+      "[outv]crop=w='trunc((if(gt(iw/ih,0.562500),ih*0.562500,iw))/2)*2':h='trunc((if(gt(iw/ih,0.562500),ih,iw/0.562500))/2)*2':x='(iw-ow)*0.2500':y='(ih-oh)/2',scale=1080:1920,setsar=1[reframed]"
+    );
+    expect(graph.indexOf("[reframed]subtitles")).toBeGreaterThan(-1);
+    expect(graph.indexOf("[captioned][logosrc]overlay")).toBeGreaterThan(-1);
+  });
+
+  it("clamps cropX and rejects nonsense sizes", () => {
+    const argv = buildRenderArgs({ ...baseArgs, reframe: { width: 1080, height: 1080, cropX: 7 } });
+    expect(argv[argv.indexOf("-filter_complex") + 1]).toContain("x='(iw-ow)*1.0000'");
+    expect(() => buildRenderArgs({ ...baseArgs, reframe: { width: 0, height: 1920, cropX: 0.5 } })).toThrow(
+      /Invalid reframe size/
+    );
+    expect(() => buildRenderArgs({ ...baseArgs, reframe: { width: 1080.5, height: 1920, cropX: 0.5 } })).toThrow();
+  });
+});

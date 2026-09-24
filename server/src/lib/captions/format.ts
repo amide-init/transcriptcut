@@ -67,7 +67,22 @@ function escapeAssText(text: string): string {
  * force_style for this file -- the inline \k tags set PrimaryColour vs.
  * SecondaryColour per word, and a force_style override would fight that.
  */
-export function toAssKaraoke(cues: CaptionCue[], style: CaptionStyle): string {
+export function toAssKaraoke(
+  cues: CaptionCue[],
+  style: CaptionStyle,
+  /**
+   * Script resolution, which must match the output's aspect ratio: libass
+   * scales PlayResX and PlayResY independently, so a 16:9 script on a 9:16
+   * clip would stretch every glyph. Defaults to the 1920x1080 reference.
+   * marginVPercent / marginHPercent override the default margins (Shorts
+   * keep captions clear of the app UI along the bottom and right edges);
+   * outline overrides the outline width in script pixels.
+   */
+  frame: { width: number; height: number; marginVPercent?: number; marginHPercent?: number; outline?: number } = {
+    width: CAPTION_REFERENCE_WIDTH,
+    height: CAPTION_REFERENCE_HEIGHT,
+  }
+): string {
   const events = cues
     .map((cue) => {
       const karaoke = cue.words
@@ -82,18 +97,21 @@ export function toAssKaraoke(cues: CaptionCue[], style: CaptionStyle): string {
     })
     .join("\n");
 
-  const fields = buildAssStyleFields(style, CAPTION_REFERENCE_HEIGHT);
+  const fields = buildAssStyleFields(style, frame.height);
+  const marginV =
+    frame.marginVPercent !== undefined ? Math.round((frame.marginVPercent / 100) * frame.height) : fields.marginV;
+  const marginH = frame.marginHPercent !== undefined ? Math.round((frame.marginHPercent / 100) * frame.width) : 10;
   const backColour = style.background ? fields.backColour : "&H00000000";
 
   return `[Script Info]
 ScriptType: v4.00+
 Collisions: Normal
-PlayResX: ${CAPTION_REFERENCE_WIDTH}
-PlayResY: ${CAPTION_REFERENCE_HEIGHT}
+PlayResX: ${frame.width}
+PlayResY: ${frame.height}
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,${style.font},${fields.fontSize},${hexToAssColor(style.highlightColor)},${hexToAssColor(style.textColor)},${hexToAssColor(style.outlineColor)},${backColour},0,0,0,0,100,100,0,0,${style.background ? 3 : 1},${fields.outline},${fields.shadow},${ALIGNMENT_BY_POSITION[style.position]},10,10,${fields.marginV},1
+Style: Default,${style.font},${fields.fontSize},${hexToAssColor(style.highlightColor)},${hexToAssColor(style.textColor)},${hexToAssColor(style.outlineColor)},${backColour},0,0,0,0,100,100,0,0,${style.background ? 3 : 1},${frame.outline ?? fields.outline},${fields.shadow},${ALIGNMENT_BY_POSITION[style.position]},${marginH},${marginH},${marginV},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text

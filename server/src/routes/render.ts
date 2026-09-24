@@ -19,8 +19,10 @@ renderRoute.post("/:id/render", async (c) => {
   let burnInCaptions = false;
   let captionStyle: CaptionStyle | undefined;
   let format: ExportFormat = "mp4";
+  let clipId: string | undefined;
   try {
     const body = await c.req.json();
+    if (typeof body?.clipId === "string") clipId = body.clipId;
     if (body?.format !== undefined) {
       const parsedFormat = exportFormatSchema.safeParse(body.format);
       if (!parsedFormat.success) {
@@ -48,7 +50,16 @@ renderRoute.post("/:id/render", async (c) => {
     return errorResponse(c, "NO_VIDEO", "This project has no video to render.", 400);
   }
 
-  const job = await prisma.renderJob.create({ data: { projectId: id, status: "queued", format } });
+  if (clipId) {
+    const clip = await prisma.clip.findUnique({ where: { id: clipId }, select: { projectId: true } });
+    if (!clip || clip.projectId !== id) {
+      return errorResponse(c, "CLIP_NOT_FOUND", "That clip doesn't exist.", 404);
+    }
+  }
+
+  const job = await prisma.renderJob.create({
+    data: { projectId: id, status: "queued", format: clipId ? "mp4" : format, clipId },
+  });
 
   // Fire-and-forget: never block the request on FFmpeg (spec section 14).
   // No `waitUntil` needed here -- Bun.serve() is one long-lived process, not
@@ -155,9 +166,11 @@ renderRoute.get("/:id/render/:jobId/download", async (c) => {
   }
 
   const project = await prisma.project.findUnique({ where: { id }, select: { name: true } });
+  const clip = job.clipId ? await prisma.clip.findUnique({ where: { id: job.clipId }, select: { name: true } }) : null;
   const parsedFormat = exportFormatSchema.safeParse(job.format);
   const format: ExportFormat = parsedFormat.success ? parsedFormat.data : "mp4";
-  const filename = `${(project?.name ?? "video").replace(/[^a-zA-Z0-9_-]/g, "_")}.${format}`;
+  const baseName = clip ? `${project?.name ?? "video"}-${clip.name}` : (project?.name ?? "video");
+  const filename = `${baseName.replace(/[^a-zA-Z0-9_-]/g, "_")}.${format}`;
 
   const file = Bun.file(resolveInDataDir(job.outputPath));
   return new Response(file, {

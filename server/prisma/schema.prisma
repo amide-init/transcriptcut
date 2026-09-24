@@ -41,6 +41,37 @@ model Project {
   renderJobs        RenderJob[]
   transcriptionJobs TranscriptionJob[]
   publishingMeta    PublishingMeta?
+  clips             Clip[]
+}
+
+/// A short, standalone excerpt for social media (claude.md "Clips / Shorts"):
+/// a source-time range of the project, rendered reframed (e.g. 9:16) with
+/// burned-in captions. The project's own cuts still apply inside it.
+model Clip {
+  id        String @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  name        String
+  /// Seconds on the source timeline (like chapters), so later edits don't move it.
+  sourceStart Float
+  sourceEnd   Float
+  /// "9:16" | "1:1" | "16:9"
+  aspect      String  @default("9:16")
+  /// Horizontal crop position, 0 (left) .. 1 (right), used when reframing to a narrower aspect.
+  cropX       Float   @default(0.5)
+  captions    Boolean @default(true)
+  /// "ai" (from Find highlights) | "manual"
+  source      String  @default("manual")
+  /// Why the AI picked it, shown to the user. Null for manual clips.
+  reason      String?
+
+  renderJobs RenderJob[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId])
 }
 
 /// Publishing helpers for a project (claude.md "Podcast publishing"): AI
@@ -137,6 +168,9 @@ model RenderJob {
   kind       String  @default("export")
   /// Output container for exports: "mp4" (video) | "mp3" | "wav" (audio-only, for podcast feeds).
   format     String  @default("mp4")
+  /// Set when this job renders a clip instead of the whole project.
+  clipId     String?
+  clip       Clip?   @relation(fields: [clipId], references: [id], onDelete: SetNull)
   /// "queued" | "processing" | "completed" | "failed"
   status     String  @default("queued")
   outputPath String?

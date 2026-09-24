@@ -6,6 +6,9 @@ import { resolveInDataDir, statAsset } from "@/lib/storage/local";
 import { computePlayableRanges } from "@/lib/timeline/cuts";
 import { buildAudioOnlyRenderArgs, buildLoudnessAnalysisArgs, buildRenderArgs } from "@/lib/ffmpeg/plan";
 import { resolveChapters, toFfmetadata } from "@/lib/publishing/chapters";
+import { clipAsCuts } from "@/lib/clips/clips";
+import { captionStyleSchema } from "@/lib/validation/caption-style";
+import { CLIP_ASPECTS, CLIP_OUTPUT_SIZE, type ClipAspect } from "@/types/clips";
 import { getEditedDuration } from "@/lib/timeline/cuts";
 import { exportFormatSchema } from "@/lib/validation/publishing";
 import type { Chapter, ExportFormat } from "@/types/publishing";
@@ -20,7 +23,7 @@ import {
 import { parseStoredAudioSettings } from "@/lib/validation/audio-settings";
 import { runFfmpeg, runFfmpegCapturingStderr } from "@/lib/ffmpeg/run";
 import { probeVideoDimensions } from "@/lib/ffmpeg/probe";
-import { generateCaptions } from "@/lib/captions/generate";
+import { generateCaptions, splitCuesForShorts } from "@/lib/captions/generate";
 import { toAssKaraoke, toSrt } from "@/lib/captions/format";
 import { DEFAULT_CAPTION_STYLE, type CaptionStyle } from "@/lib/captions/style";
 import { DEFAULT_VIDEO_PROPERTIES } from "@/types/video-properties";
@@ -101,6 +104,27 @@ export async function resolveLoudnessGain(
   }
 }
 
+/**
+ * Shorts captions sit higher than normal (clear of the app's bottom UI),
+ * with side margins and a heavier outline -- measured on a 9:16 render, the
+ * default 2px outline was too thin to read over busy footage at phone size.
+ */
+const SHORTS_CAPTION_MARGINS = { marginVPercent: 18, marginHPercent: 7, outline: 5 };
+
+/**
+ * The project's caption look (font, colors, background), scaled up for
+ * phone screens, with word highlight on -- the Shorts/Reels style.
+ */
+function shortsCaptionStyle(captionStyleJson: string | null): CaptionStyle {
+  const parsed = captionStyleJson ? captionStyleSchema.safeParse(JSON.parse(captionStyleJson)) : null;
+  const base = parsed?.success ? parsed.data : DEFAULT_CAPTION_STYLE;
+  return { ...base, fontSize: 5.5, position: "bottom", wordHighlight: true };
+}
+
+function toClipAspect(value: string): ClipAspect {
+  return (CLIP_ASPECTS as readonly string[]).includes(value) ? (value as ClipAspect) : "9:16";
+}
+
 export const EXPORT_MIME_TYPES: Record<ExportFormat, string> = {
   mp4: "video/mp4",
   mp3: "audio/mpeg",
@@ -120,7 +144,9 @@ export async function runRenderJob(
   try {
     await prisma.renderJob.update({ where: { id: jobId }, data: { status: "processing" } });
 
-    const job = await prisma.renderJob.findUniqueOrThrow({ where: { id: jobId } });
+    const job = await prisma.renderJob.findUniqueOrThrow({ where: { id: jobId }, include: { clip: true } });
+    if (job.clipId && !job.clip) throw new Error("This clip no longer exists.");
+    const clip = job.clip;
     const project = await prisma.project.findUnique({
       where: { id: job.projectId },
       include: { assets: true, editOperations: true, transcript: true, publishingMeta: true },
@@ -128,20 +154,31 @@ export async function runRenderJob(
     if (!project) throw new Error("Project not found.");
     const parsedFormat = exportFormatSchema.safeParse(job.format);
     const format: ExportFormat = parsedFormat.success ? parsedFormat.data : "mp4";
-    const isVideo = format === "mp4";
+    // Clips are always video.
+    const isVideo = format === "mp4" || clip !== null;
     if (project.duration === null) throw new Error("Video duration isn't known yet -- open the project once first.");
 
     const originalAsset = project.assets.find((a) => a.kind === "original");
     if (!originalAsset) throw new Error("No source video for this project.");
     const logoAsset = project.assets.find((a) => a.kind === "logo");
 
-    const cuts = project.editOperations
-      .map((op) => JSON.parse(op.dataJson) as EditOperation)
-      .filter((op): op is CutOperation => op.type === "cut");
+    // A clip is rendered as the project with everything outside it cut too,
+    // so the project's own edits still apply inside the clip.
+    const cuts = [
+      ...project.editOperations
+        .map((op) => JSON.parse(op.dataJson) as EditOperation)
+        .filter((op): op is CutOperation => op.type === "cut"),
+      ...(clip ? clipAsCuts(clip, project.duration) : []),
+    ];
     const playableRanges = computePlayableRanges(project.duration, cuts);
 
     const inputPath = resolveInDataDir(originalAsset.filePath);
-    const outputRelativePath = path.posix.join("projects", project.id, "render", `${jobId}.${format}`);
+    const outputRelativePath = path.posix.join(
+      "projects",
+      project.id,
+      "render",
+      clip ? `clip-${jobId}.mp4` : `${jobId}.${format}`
+    );
     const outputPath = resolveInDataDir(outputRelativePath);
     await mkdir(path.dirname(outputPath), { recursive: true });
 
@@ -151,17 +188,22 @@ export async function runRenderJob(
     // and skip force_style entirely (the file's own [V4+ Styles] line already has
     // the chosen font/size/colors/position/background baked in).
     // Captions, logo and color are video-only; an MP3/WAV export skips them.
-    const burnInCaptions = isVideo && options.burnInCaptions;
+    const burnInCaptions = clip ? clip.captions : isVideo && options.burnInCaptions;
     const useLogo = isVideo && Boolean(logoAsset);
-    const useKaraoke = burnInCaptions && options.captionStyle?.wordHighlight === true;
+    const clipAspect = clip ? toClipAspect(clip.aspect) : null;
+    const clipFrame = clipAspect ? CLIP_OUTPUT_SIZE[clipAspect] : null;
+    // Clips always use word-highlight Shorts captions, laid out for the clip's own frame.
+    const captionStyle = clip ? shortsCaptionStyle(project.captionStyleJson) : options.captionStyle;
+    const useKaraoke = burnInCaptions && captionStyle?.wordHighlight === true;
 
     // Needed to size the logo overlay relative to the frame, and to convert
     // force_style's fontSize/margin from percent-of-frame into the literal
     // output pixels it actually requires (see ffmpeg/plan.ts) -- skip the
     // probe when neither applies. The karaoke .ass path doesn't need this:
     // it scales itself via PlayResX/Y instead (see lib/captions/format.ts).
-    const needsVideoDimensions = useLogo || (burnInCaptions && !useKaraoke);
-    const videoDimensions = needsVideoDimensions ? await probeVideoDimensions(inputPath) : undefined;
+    // A clip's output size is known up front; no probe needed.
+    const needsVideoDimensions = !clipFrame && (useLogo || (burnInCaptions && !useKaraoke));
+    const videoDimensions = clipFrame ?? (needsVideoDimensions ? await probeVideoDimensions(inputPath) : undefined);
 
     if (burnInCaptions) {
       if (!project.transcript) throw new Error("Captions were requested but this project has no transcript.");
@@ -169,12 +211,17 @@ export async function runRenderJob(
         id: project.transcript.id,
         segments: JSON.parse(project.transcript.segmentsJson),
       };
-      const cues = generateCaptions(transcript, cuts, project.duration);
+      const sentenceCues = generateCaptions(transcript, cuts, project.duration);
+      const cues = clip ? splitCuesForShorts(sentenceCues) : sentenceCues;
       const subtitleExt = useKaraoke ? "ass" : "srt";
       const subtitleRelativePath = path.posix.join("projects", project.id, "render", `${jobId}.${subtitleExt}`);
       subtitlesPath = resolveInDataDir(subtitleRelativePath);
       const contents = useKaraoke
-        ? toAssKaraoke(cues, options.captionStyle ?? DEFAULT_CAPTION_STYLE)
+        ? toAssKaraoke(
+            cues,
+            captionStyle ?? DEFAULT_CAPTION_STYLE,
+            clipFrame ? { ...clipFrame, ...SHORTS_CAPTION_MARGINS } : undefined
+          )
         : toSrt(cues);
       await writeFile(subtitlesPath, contents, "utf-8");
     }
@@ -191,13 +238,16 @@ export async function runRenderJob(
     const chapters: Chapter[] = project.publishingMeta?.chaptersJson
       ? JSON.parse(project.publishingMeta.chaptersJson)
       : [];
-    const metadataRelativePath = path.posix.join("projects", project.id, "render", `${jobId}.ffmeta`);
-    const metadataPath = resolveInDataDir(metadataRelativePath);
-    await writeFile(
-      metadataPath,
-      toFfmetadata(resolveChapters(chapters, playableRanges), getEditedDuration(playableRanges), project.name),
-      "utf-8"
-    );
+    // Clips are standalone excerpts: the episode's chapters and title don't apply.
+    let metadataPath: string | undefined;
+    if (!clip) {
+      metadataPath = resolveInDataDir(path.posix.join("projects", project.id, "render", `${jobId}.ffmeta`));
+      await writeFile(
+        metadataPath,
+        toFfmetadata(resolveChapters(chapters, playableRanges), getEditedDuration(playableRanges), project.name),
+        "utf-8"
+      );
+    }
 
     const args = isVideo
       ? buildRenderArgs({
@@ -207,7 +257,7 @@ export async function runRenderJob(
           filterId: project.filterId,
           properties: project.propertiesJson ? JSON.parse(project.propertiesJson) : DEFAULT_VIDEO_PROPERTIES,
           srtPath: subtitlesPath,
-          captionStyle: subtitlesPath && !useKaraoke ? (options.captionStyle ?? DEFAULT_CAPTION_STYLE) : undefined,
+          captionStyle: subtitlesPath && !useKaraoke ? (captionStyle ?? DEFAULT_CAPTION_STYLE) : undefined,
           logoPath: useLogo ? resolveInDataDir(logoAsset!.filePath) : undefined,
           logoPosition: useLogo ? toLogoPosition(project.logoPosition) : undefined,
           logoPaddingX: useLogo ? project.logoPaddingX : undefined,
@@ -217,6 +267,7 @@ export async function runRenderJob(
           videoHeight: videoDimensions?.height,
           audioFilter,
           metadataPath,
+          reframe: clip && clipFrame ? { ...clipFrame, cropX: clip.cropX } : undefined,
         })
       : buildAudioOnlyRenderArgs({ inputPath, outputPath, playableRanges, audioFilter, format, metadataPath });
     await runFfmpeg(args);
@@ -227,7 +278,7 @@ export async function runRenderJob(
         projectId: project.id,
         kind: "render",
         filePath: outputRelativePath,
-        mimeType: EXPORT_MIME_TYPES[format],
+        mimeType: clip ? "video/mp4" : EXPORT_MIME_TYPES[format],
         sizeBytes: stats.size,
       },
     });
