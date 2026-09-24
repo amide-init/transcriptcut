@@ -35,8 +35,9 @@ model Project {
 
   assets         Asset[]
   transcript     Transcript?
-  editOperations EditOperation[]
-  renderJobs     RenderJob[]
+  editOperations    EditOperation[]
+  renderJobs        RenderJob[]
+  transcriptionJobs TranscriptionJob[]
 }
 
 model Asset {
@@ -79,6 +80,27 @@ model EditOperation {
   dataJson String
 
   createdAt DateTime @default(now())
+
+  @@index([projectId])
+}
+
+/// Background transcription run (audio extraction -> chunked Whisper calls ->
+/// merge), tracked the same way as RenderJob so long episodes never block
+/// an API request (claude.md section 14). The finished result is written to
+/// Transcript; this row only carries status/progress.
+model TranscriptionJob {
+  id        String @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  /// "queued" | "processing" | "completed" | "failed"
+  status          String @default("queued")
+  totalChunks     Int    @default(0)
+  completedChunks Int    @default(0)
+  error           String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([projectId])
 }
