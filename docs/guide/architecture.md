@@ -33,12 +33,13 @@ child process and points a Tauri window at it. See [Download](/download).
 
 ```text
 data/
+  app.db          — the SQLite database
   projects/{projectId}/
     original/     — uploaded source video, never overwritten
-    proxy/        — lower-res proxy used by the editor where possible
-    audio/        — extracted audio for transcription
-    thumbnails/   — timeline frame thumbnails
-    renders/      — exported output files
+    proxy/        — 720p editing proxy (made for sources above 720p or over 300 MB)
+    audio/        — small speech-quality track: transcription, speaker detection, waveform
+    logo/         — uploaded watermark image
+    render/       — exports, clips, and audio previews
 ```
 
 Rendered output is always a separate file from the original — the
@@ -77,9 +78,16 @@ Every edit is an operation (cut, trim, split, caption) applied to this
 model — serializable, deterministic, validated, undoable, and replayable.
 See [Editing Workflow](/guide/editing-workflow).
 
-## Rendering is asynchronous
+## Long work runs in the background
 
-Long-running FFmpeg work never blocks an API request:
+Transcription, speaker detection and rendering can each take minutes on a
+long episode, so none of them block an API request. Each gets a job row
+the frontend polls: `TranscriptionJob` (transcription and speaker
+detection, with chunk progress) and `RenderJob` (exports, clips, audio
+previews). Jobs still running when the server restarts are marked failed,
+so a retry is never blocked.
+
+Rendering, for example:
 
 ```text
 Frontend → API route → create RenderJob row (status: "queued")
@@ -91,6 +99,14 @@ Frontend polls for status.
 For a single local user, one render at a time is fine — there's no
 Pub/Sub or separate worker process. A real job queue is only worth
 adding if concurrent renders become an actual requirement.
+
+## Database upgrades
+
+The server applies any pending Prisma migrations at startup and records
+them in Prisma's own `_prisma_migrations` table. That's what upgrades an
+existing Mac app install, which can't run the Prisma CLI, to a newer
+schema without losing projects. For a database that's already current,
+it does nothing.
 
 ## No accounts, by design
 

@@ -57,3 +57,36 @@ export function probeVideoDimensions(inputPath: string): Promise<{ width: number
     });
   });
 }
+
+/**
+ * Reads a media file's container duration in seconds via ffprobe -- used to
+ * plan transcription chunks over the extracted audio track.
+ */
+export function probeDuration(inputPath: string): Promise<number> {
+  const binary = process.env.FFPROBE_PATH || "ffprobe";
+  const args = ["-v", "error", "-show_entries", "format=duration", "-of", "json", inputPath];
+  return new Promise((resolve, reject) => {
+    execFile(/* turbopackIgnore: true */ binary, args, { maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
+      if (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+          reject(new FfprobeNotFoundError());
+          return;
+        }
+        const tail = stderr.trim().split("\n").slice(-20).join("\n");
+        reject(new Error(`ffprobe exited with an error:\n${tail}`));
+        return;
+      }
+      try {
+        const parsed = JSON.parse(stdout) as { format?: { duration?: string } };
+        const duration = Number(parsed.format?.duration);
+        if (!Number.isFinite(duration) || duration <= 0) {
+          reject(new Error(`ffprobe returned no duration for ${inputPath}.`));
+          return;
+        }
+        resolve(duration);
+      } catch {
+        reject(new Error(`Could not parse ffprobe output for ${inputPath}.`));
+      }
+    });
+  });
+}

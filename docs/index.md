@@ -5,9 +5,11 @@ hero:
   name: transcriptcut
   text: Edit video by editing its transcript
   tagline: >-
-    Local-first and open source. Delete a sentence in the transcript, the
-    matching cut lands on the timeline. No cloud account, no bill — just
-    npm install and an LLM API key for transcription.
+    Built for video podcasts. Delete a sentence in the transcript and the
+    matching cut lands on the timeline, then get podcast-ready audio,
+    speaker labels, chapters, show notes and Shorts from the same project.
+    Local-first and open source: no cloud account, just your own OpenAI
+    API key.
   image:
     src: /screenshots/hero.png
     alt: transcriptcut editor showing video, transcript, and timeline
@@ -18,6 +20,9 @@ hero:
     - theme: alt
       text: Get Started
       link: /guide/getting-started
+    - theme: alt
+      text: Podcast Workflow
+      link: /guide/podcasting
     - theme: alt
       text: See Screenshots
       link: /screenshots
@@ -32,19 +37,43 @@ features:
       Select and delete text in the transcript and the corresponding
       section of the video is cut — reflected on the timeline and skipped
       during playback, with full undo/redo.
+  - icon: 🎙️
+    title: Made for long, multi-speaker episodes
+    details: >-
+      Multi-GB uploads, background transcription in chunks with progress,
+      a 720p editing proxy, and speaker detection with one-click rename
+      and "cut everything this person said".
+  - icon: 🔊
+    title: Podcast-ready audio
+    details: >-
+      Hit -16 or -14 LUFS, reduce noise, level a quiet guest against a
+      loud host, remove rumble. Preview 15 seconds before and after, then
+      bake it into the export.
+  - icon: 📚
+    title: Chapters, show notes, MP3
+    details: >-
+      AI chapters built into every MP4 and MP3 export and copyable as
+      YouTube timestamps, editable show notes and title ideas, TXT/Markdown
+      transcripts, and MP3/WAV export for your feed.
+  - icon: 📱
+    title: Shorts from the same edit
+    details: >-
+      AI finds the episode's best standalone moments. Render them as
+      9:16 clips with big word-by-word captions and a crop you position on
+      the video.
   - icon: 🎯
     title: Scoped AI actions, not a chat bar
     details: >-
-      One-click filler-word and long-pause removal, backed by algorithmic
-      detection (an LLM only disambiguates ambiguous single words like
-      "like" in context). No open-ended "ask the AI to edit this" field —
-      see why in the Guide.
+      Every AI step is a specific button: filler words, speakers,
+      chapters, show notes, highlights. Models return text and sentence
+      picks, never timestamps or edits. No open-ended "ask the AI to edit
+      this" field — see why in the Guide.
   - icon: 🖥️
     title: Runs entirely on your machine
     details: >-
       SQLite via Prisma, local filesystem storage, FFmpeg as a child
-      process. The only external call is to an LLM provider, for
-      transcription and word classification — never for storage.
+      process. The only external calls are to OpenAI, for transcription
+      and the AI buttons — never for storage.
   - icon: 🎞️
     title: Zoomable timeline + waveform
     details: >-

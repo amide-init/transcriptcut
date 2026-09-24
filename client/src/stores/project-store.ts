@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { DEFAULT_VIDEO_PROPERTIES, type VideoProperties } from "@/types/video-properties";
+import { DEFAULT_AUDIO_SETTINGS, type AudioSettings } from "@/types/audio-settings";
 import {
   DEFAULT_LOGO_OPACITY,
   DEFAULT_LOGO_PADDING_PERCENT,
@@ -13,12 +14,16 @@ type ProjectStore = {
   id: string | null;
   name: string;
   videoUrl: string | null;
+  /** Small extracted speech track (server-side, during transcription) -- decoded for the waveform instead of the whole video. */
+  audioUrl: string | null;
   status: ProjectStatus;
   error: string | null;
   /** Id of the selected preview filter (see lib/video/filters.ts), "none" by default. */
   filterId: string;
   /** Manual color-adjustment sliders, layered on top of the filter preset. */
   properties: VideoProperties;
+  /** Podcast audio cleanup applied at export (see types/audio-settings.ts). */
+  audioSettings: AudioSettings;
   /** Uploaded logo/watermark image, or null if none is set (see lib/video/logo.ts). */
   logoUrl: string | null;
   logoPosition: LogoPosition;
@@ -35,6 +40,8 @@ type ProjectStore = {
   setFilterId: (id: string) => void;
   /** Updates local state immediately; persists debounced (sliders fire on every drag tick). */
   setProperties: (properties: VideoProperties) => void;
+  /** Updates local state and persists to the backend (fire-and-forget). */
+  setAudioSettings: (audioSettings: AudioSettings) => void;
   /** Sets the logo image URL after upload/removal (fire-and-forget upload already happened). */
   setLogoUrl: (url: string | null) => void;
   /** Updates local state and persists to the backend (fire-and-forget). */
@@ -51,11 +58,13 @@ type ProjectStore = {
     name: string;
     filterId: string;
     properties: VideoProperties | null;
+    audioSettings: AudioSettings | null;
     logoPosition: LogoPosition;
     logoPaddingX: number;
     logoPaddingY: number;
     logoOpacity: number;
     videoUrl: string | null;
+    audioUrl: string | null;
     logoUrl: string | null;
   }) => void;
   reset: () => void;
@@ -65,10 +74,12 @@ const initialState = {
   id: null as string | null,
   name: "Untitled Project",
   videoUrl: null as string | null,
+  audioUrl: null as string | null,
   status: "empty" as ProjectStatus,
   error: null as string | null,
   filterId: "none",
   properties: DEFAULT_VIDEO_PROPERTIES,
+  audioSettings: DEFAULT_AUDIO_SETTINGS,
   logoUrl: null as string | null,
   logoPosition: DEFAULT_LOGO_POSITION,
   logoPaddingX: DEFAULT_LOGO_PADDING_PERCENT,
@@ -125,6 +136,17 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         body: JSON.stringify({ properties }),
       }).catch((err) => console.error("Failed to persist video properties:", err));
     }, PROPERTIES_DEBOUNCE_MS);
+  },
+
+  setAudioSettings: (audioSettings) => {
+    set({ audioSettings });
+    const { id } = get();
+    if (!id) return;
+    fetch(`/api/projects/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ audioSettings }),
+    }).catch((err) => console.error("Failed to persist audio settings:", err));
   },
 
   setLogoUrl: (logoUrl) => set({ logoUrl }),
@@ -184,11 +206,13 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       name: project.name,
       filterId: project.filterId,
       properties: project.properties ?? DEFAULT_VIDEO_PROPERTIES,
+      audioSettings: project.audioSettings ?? DEFAULT_AUDIO_SETTINGS,
       logoPosition: project.logoPosition,
       logoPaddingX: project.logoPaddingX,
       logoPaddingY: project.logoPaddingY,
       logoOpacity: project.logoOpacity,
       videoUrl: project.videoUrl,
+      audioUrl: project.audioUrl,
       logoUrl: project.logoUrl,
       status: "ready",
       error: null,

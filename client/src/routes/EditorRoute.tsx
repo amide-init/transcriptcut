@@ -7,6 +7,7 @@ import type { Transcript } from "@/types/transcript";
 import type { EditOperation } from "@/types/edit-operation";
 import type { CaptionStyle } from "@/lib/captions/style";
 import type { VideoProperties } from "@/types/video-properties";
+import type { AudioSettings } from "@/types/audio-settings";
 
 type ProjectDetailResponse = {
   success: true;
@@ -18,6 +19,7 @@ type ProjectDetailResponse = {
     burnInCaptions: boolean;
     captionStyle: CaptionStyle | null;
     properties: VideoProperties | null;
+    audioSettings: AudioSettings | null;
     logoPosition: string;
     logoPaddingX: number;
     logoPaddingY: number;
@@ -28,6 +30,7 @@ type ProjectDetailResponse = {
   transcript: Transcript | null;
   operations: EditOperation[];
   videoUrl: string | null;
+  audioUrl: string | null;
   logoUrl: string | null;
 };
 
@@ -78,7 +81,7 @@ export function EditorRoute() {
     );
   }
 
-  const { project, transcript, operations, videoUrl, logoUrl } = state;
+  const { project, transcript, operations, videoUrl, audioUrl, logoUrl } = state;
 
   return (
     <EditorHydrator
@@ -89,11 +92,13 @@ export function EditorRoute() {
         burnInCaptions: project.burnInCaptions,
         captionStyle: project.captionStyle,
         properties: project.properties,
+        audioSettings: project.audioSettings,
         logoPosition: toLogoPosition(project.logoPosition),
         logoPaddingX: project.logoPaddingX,
         logoPaddingY: project.logoPaddingY,
         logoOpacity: project.logoOpacity,
         videoUrl,
+        audioUrl,
         logoUrl,
       }}
       transcript={transcript}

@@ -83,6 +83,8 @@ projectsRoute.get("/:id", async (c) => {
 
   const originalAsset = project.assets.find((a) => a.kind === "original") ?? null;
   const logoAsset = project.assets.find((a) => a.kind === "logo") ?? null;
+  const proxyAsset = project.assets.find((a) => a.kind === "proxy") ?? null;
+  const audioAsset = project.assets.find((a) => a.kind === "audio") ?? null;
 
   return c.json({
     success: true,
@@ -94,6 +96,7 @@ projectsRoute.get("/:id", async (c) => {
       burnInCaptions: project.burnInCaptions,
       captionStyle: project.captionStyleJson ? JSON.parse(project.captionStyleJson) : null,
       properties: project.propertiesJson ? JSON.parse(project.propertiesJson) : null,
+      audioSettings: project.audioSettingsJson ? JSON.parse(project.audioSettingsJson) : null,
       logoPosition: project.logoPosition,
       logoPaddingX: project.logoPaddingX,
       logoPaddingY: project.logoPaddingY,
@@ -103,7 +106,10 @@ projectsRoute.get("/:id", async (c) => {
     },
     transcript,
     operations,
-    videoUrl: originalAsset ? `/api/projects/${project.id}/video` : null,
+    videoUrl: originalAsset
+      ? `/api/projects/${project.id}/video${proxyAsset ? "?variant=proxy" : ""}`
+      : null,
+    audioUrl: audioAsset ? `/api/projects/${project.id}/audio` : null,
     logoUrl: logoAsset ? `/api/projects/${project.id}/logo` : null,
   });
 });

@@ -1,9 +1,9 @@
 # Getting Started
 
 transcriptcut is local-first: everything runs on your own machine with
-`pnpm install && pnpm run dev`. The only external dependency is an LLM
-provider API key, used purely for transcription and word classification,
-never for storage.
+`pnpm install && pnpm run dev`. The only external dependency is an
+OpenAI API key, used for transcription and the AI buttons (filler words,
+speakers, chapters, show notes, highlights), never for storage.
 
 Prefer not to run anything at all? A native macOS app is also available
 — see [Download](/download).
@@ -13,9 +13,9 @@ Prefer not to run anything at all? A native macOS app is also available
 - [Node.js](https://nodejs.org/) 20+
 - [pnpm](https://pnpm.io/) 10+
 - [Bun](https://bun.sh) (the backend's runtime)
-- [FFmpeg](https://ffmpeg.org/download.html) on your `PATH` (used for
-  cuts and export)
-- An OpenAI API key (used server-side only, for Whisper transcription)
+- [FFmpeg](https://ffmpeg.org/download.html) and `ffprobe` on your
+  `PATH` (used for audio extraction, cuts, audio cleanup and export)
+- An OpenAI API key (used server-side only)
 
 ## macOS quick start
 
@@ -52,7 +52,16 @@ pnpm run dev                  # runs the Vite client and Bun backend together
 
 Open `http://localhost:5173`. See
 [`server/.env.example`](https://github.com/amide-init/transcriptcut/blob/main/server/.env.example)
-for what each variable does.
+for what each variable does. `MAX_UPLOAD_MB` raises or lowers the upload
+limit, which defaults to 10 GB.
+
+::: tip Long dev sessions
+`pnpm run dev` runs the backend with `bun --watch`, which holds on to a
+few file handles every time it reloads. After a long session with many
+server code edits, starting FFmpeg can fail with `EBADF: bad file
+descriptor, posix_spawn`. Restarting `pnpm run dev` clears it. The
+packaged Mac app doesn't use `--watch` and isn't affected.
+:::
 
 ## Your first edit
 
@@ -60,18 +69,22 @@ for what each variable does.
 2. **Upload a video** — it's stored under your local `DATA_DIR`, never
    overwritten.
 3. **Wait for transcription** — Whisper produces word- and
-   segment-level timestamps automatically.
+   segment-level timestamps automatically. Long episodes are transcribed
+   in chunks in the background, with progress shown.
 4. **Select text in the transcript and delete it.** The matching section
    of the video is cut immediately — reflected on the timeline and
    skipped during playback.
 5. **Try "Find filler words" or "Find long pauses"** to flag candidates
    for one-click removal.
 6. **Preview**, then **Export** to render the final MP4 with every
-   preview effect (filters, color, logo, captions) baked in.
+   preview effect (filters, color, logo, captions) baked in, or pick MP3 /
+   WAV for an audio-only podcast feed.
 
-See [Editing Workflow](/guide/editing-workflow) for how transcript edits
-map to video cuts, and [AI-Assisted Editing](/guide/ai-editing) for what
-the AI does (and deliberately does not do).
+Making a podcast? The [Podcast Workflow](/guide/podcasting) guide covers
+speakers, audio cleanup, chapters, show notes and Shorts. See
+[Editing Workflow](/guide/editing-workflow) for how transcript edits map
+to video cuts, and [AI-Assisted Editing](/guide/ai-editing) for what the
+AI does (and deliberately does not do).
 
 ## Testing
 
@@ -80,9 +93,10 @@ pnpm run test   # runs both client and server test suites
 ```
 
 Deterministic Vitest unit tests cover timeline cut/trim math,
-transcript-to-caption mapping, the FFmpeg render-plan builder, path-
-traversal safety, and CSS-preview ↔ FFmpeg-export parity. CI runs the
-same command on every PR.
+transcript-to-caption mapping, the FFmpeg render-plan builder (cuts,
+audio cleanup, reframing, chapters), chunked transcription and speaker
+alignment, chapter and highlight validation, path-traversal safety, and
+CSS-preview ↔ FFmpeg-export parity. CI runs the same command on every PR.
 
 ## Project structure
 

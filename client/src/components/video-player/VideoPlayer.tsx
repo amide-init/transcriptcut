@@ -21,6 +21,7 @@ import { formatTimecode } from "@/lib/timeline/format";
 import { getFilterPreset } from "@/lib/video/filters";
 import { buildPropertiesCss, buildPropertiesSvgValues } from "@/lib/video/properties";
 import { logoPositionToCss } from "@/lib/video/logo";
+import { CropOverlay } from "@/components/video-player/CropOverlay";
 import type { CutOperation } from "@/types/edit-operation";
 
 /**
@@ -280,7 +281,7 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
         caption font-size/margin be a true frame-relative percent in CSS,
         the same way ffmpeg's PlayResY does for the export (GitHub #22).
       */}
-      <div className="relative min-h-0 flex-1 [container-type:size]">
+      <div className="relative min-h-0 flex-1 overflow-hidden [container-type:size]">
         <video
           ref={videoRef}
           src={videoUrl}
@@ -292,6 +293,7 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
           onPause={() => setIsPlaying(false)}
           data-playing={isPlaying}
         />
+        <CropOverlay />
         {logoUrl && (
           <img
             src={logoUrl}

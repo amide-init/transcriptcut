@@ -217,7 +217,12 @@ Do not use GPT-5.6 Luna for every request.
 Transcription is a separate concern from editing and isn't routed through
 the GPT-4o-mini / GPT-5.6 Luna split above. Use OpenAI Whisper
 (`whisper-1`, `verbose_json`, word + segment timestamp granularity) —
-already implemented in `lib/ai/transcribe.ts`. Keep it behind a clear
+already implemented in `lib/ai/transcribe.ts`. Long episodes are handled
+by `lib/ai/transcription-job.ts`: it extracts a mono 16kHz 32kbps speech
+track, splits it into ~10-minute chunks at detected silences
+(`lib/ai/chunking.ts`), transcribes the chunks in parallel, and merges them
+back onto the source timeline, so source file size never hits Whisper's
+25MB upload cap. Keep it behind a clear
 service interface (per section 29) so the provider can be swapped later.
 
 ---
@@ -575,6 +580,62 @@ child process on the same machine as everything else (see section 18).
 
 ---
 
+## Podcast audio cleanup
+
+Per-project `AudioSettings` (`server/src/types/audio-settings.ts`, stored as
+`Project.audioSettingsJson`): loudness target (off / -16 / -14 LUFS), noise
+reduction (afftdn), speaker leveling (dynaudnorm) and an 80Hz high-pass.
+Enums/booleans only, mapped to fixed filter strings in
+`lib/ffmpeg/audio-filters.ts`. Loudness is set by measured gain + a peak
+limiter at -2 dBTP, not loudnorm's linear mode (which silently falls back
+to dynamic mode and undershoots on peaky speech); `render-job.ts#resolveLoudnessGain`
+measures and corrects with secant steps. Defaults are all off, so exports
+are unchanged unless a user opts in.
+
+## Podcast publishing
+
+`PublishingMeta` (one per project) holds AI-generated, user-editable
+chapters and show notes (`server/src/types/publishing.ts`). The model
+(gpt-4o-mini) only returns text and *sentence indices* -- chapter starts
+come from those sentences' own timestamps, never from a time the model
+wrote. Chapters are stored in **source** time and mapped onto the edited
+timeline when shown or exported (`lib/publishing/chapters.ts`), so later
+cuts don't strand them. Every export (MP4, and MP3 at 44.1kHz/192k) embeds
+the episode title and chapters via a generated FFMETADATA file; WAV can't
+hold chapters. AI output never changes the edit.
+
+## Speaker detection
+
+An explicit "Detect speakers" action, not part of transcription: the
+diarization model (`gpt-4o-transcribe-diarize`, behind `lib/ai/diarize.ts`)
+runs at about half real time. It returns speaker-labeled spans but no word
+timings, so Whisper stays the source of truth for words; diarization only
+decides who said each word (`lib/ai/speakers.ts#assignSpeakers`), splitting
+segments where the speaker changes. Labels are only consistent within one
+API call, so `lib/ai/diarization-job.ts` keeps them consistent across
+~10-minute chunks two ways: reference clips of the first chunk's voices
+(`known_speaker_names`), and a 45s overlap between chunks used to match any
+label the references missed. Results land in the existing `segment.speaker`
+field ("Speaker 1", ...), so captions, exports and show notes use them with
+no changes. Cutting a speaker is ordinary cut operations. Known limit:
+similar-sounding voices can merge into one speaker.
+
+## Clips / Shorts
+
+`Clip` rows are source-time ranges with an aspect (9:16, 1:1, 16:9), a
+horizontal crop position and a captions toggle. "Find highlights" is the
+one feature routed to GPT-5.6 Luna (`gpt-5.6-luna`, section 4: selecting
+important sections); like chapters, the model returns sentence indices,
+never times, and `lib/clips/clips.ts#highlightsFromPicks` enforces length
+(15-90s), whole sentences and no overlaps. A clip renders through the
+normal export as the project **plus two extra cuts** (everything before
+and after it), so the project's own edits and audio cleanup apply inside
+it; `plan.ts` then crops/scales to the clip frame, and captions are
+re-cut into 3-4 word Shorts cues laid out for that frame (the ASS script
+resolution must match the output aspect, or libass stretches glyphs).
+
+---
+
 # 13. Architecture (local-first)
 
 No cloud account is required to run or develop this project.
@@ -714,6 +775,8 @@ Transcript     — belongs to Project
 EditOperation  — belongs to Project
 
 RenderJob      — belongs to Project
+
+TranscriptionJob — belongs to Project (background chunked transcription status/progress)
 ```
 
 No `User` model, no ownership checks for v1 (see section 2) — every
@@ -810,15 +873,34 @@ GET    /api/projects
 GET    /api/projects/:id
 
 POST   /api/projects/:id/upload
-POST   /api/projects/:id/transcribe
+POST   /api/projects/:id/transcribe          (202 + jobId; runs in the background)
+GET    /api/projects/:id/transcribe/:jobId   (status + chunk progress)
+
+GET    /api/projects/:id/video[?variant=proxy]
+GET    /api/projects/:id/audio               (extracted speech track, for the waveform)
 
 GET    /api/projects/:id/transcript
 
 POST   /api/projects/:id/operations
 DELETE /api/projects/:id/operations/:operationId
 
-POST   /api/projects/:id/render
+POST   /api/projects/:id/render                 (body: format mp4|mp3|wav, captions)
 GET    /api/projects/:id/render/:jobId
+POST   /api/projects/:id/render/audio-preview   (15s before/after sample of the audio settings)
+
+GET    /api/projects/:id/publishing                 (chapters on the edited timeline + show notes)
+POST   /api/projects/:id/publishing/chapters        (AI-generate)   PUT (save user edits)
+POST   /api/projects/:id/publishing/show-notes      (AI-generate)   PUT (save user edits)
+GET    /api/projects/:id/transcript/export?format=txt|md
+
+POST   /api/projects/:id/speakers/detect         (202 + jobId; background speaker detection)
+GET    /api/projects/:id/speakers/detect/:jobId
+POST   /api/projects/:id/speakers/rename         ({from, to|null} on every segment)
+
+GET    /api/projects/:id/clips
+POST   /api/projects/:id/clips/highlights        (GPT-5.6 Luna picks; replaces earlier AI picks)
+POST   /api/projects/:id/clips                   PATCH/DELETE /api/projects/:id/clips/:clipId
+(render a clip: POST /api/projects/:id/render with {clipId})
 ```
 
 (No `POST /api/projects/:id/ai/edit` — the free-text AI command bar this

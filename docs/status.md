@@ -15,6 +15,19 @@ sentence, not just a blanket undo).
 The timeline shows zoomable frame thumbnails and a live-updating waveform
 — both get denser, not just stretched, as you zoom in.
 
+## Podcast features
+
+| Feature | Notes |
+| --- | --- |
+| Long episodes | Uploads up to 10 GB; background transcription in ~10-minute chunks with progress; 720p editing proxy for large sources. |
+| Speaker detection | One button; rename a speaker everywhere; cut or restore everything one person said. Similar voices can merge. |
+| Audio cleanup | -16 / -14 LUFS loudness targets, noise reduction, speaker leveling, rumble filter, 15-second before/after preview. |
+| Publishing | AI chapters (built into MP4/MP3 exports, copyable for YouTube), AI show notes and title ideas, TXT/Markdown transcript, MP3/WAV export. |
+| Clips / Shorts | AI highlight picks or clips from a transcript selection; 9:16, 1:1 or 16:9 with a positionable crop and Shorts-style captions. |
+
+See the [Podcast Workflow](/guide/podcasting) guide for how they fit
+together.
+
 ## Editing tools beyond manual transcript cuts
 
 | Feature | Notes |
@@ -25,7 +38,7 @@ The timeline shows zoomable frame thumbnails and a live-updating waveform
 | Elements | A logo/watermark overlay (position, padding, opacity). |
 | Captions | Font, size, color, position, background-box styling, plus optional word-by-word karaoke-style highlight. |
 
-Export renders the final MP4 with every preview effect above baked in —
+Export renders the final MP4 (or MP3/WAV) with every preview effect above baked in —
 the CSS-preview ↔ FFmpeg-export math for each is unit-tested to catch the
 preview and the actual export drifting apart, which has happened in
 practice for several of these (see the issue tracker's closed bugs).

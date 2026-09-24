@@ -60,3 +60,31 @@ export function generateCaptions(
 
   return cues.filter((c) => c.end > c.start).sort((a, b) => a.start - b.start);
 }
+
+/**
+ * Re-cuts sentence-long cues into a few words each -- the fast, punchy
+ * captions Shorts/Reels use. On a narrow vertical frame at Shorts font
+ * sizes, a full sentence wraps into a wall of text. Word timings are kept,
+ * so word-highlight still lines up.
+ */
+export function splitCuesForShorts(cues: CaptionCue[], maxWords = 4): CaptionCue[] {
+  return cues.flatMap((cue) => {
+    if (cue.words.length <= maxWords) return [cue];
+    // Even out group sizes (7 words -> 4+3, not 4+3... or 6+1).
+    const groups = Math.ceil(cue.words.length / maxWords);
+    const size = Math.ceil(cue.words.length / groups);
+    const parts: CaptionCue[] = [];
+    for (let i = 0; i < cue.words.length; i += size) {
+      const words = cue.words.slice(i, i + size);
+      const next = cue.words[i + size];
+      parts.push({
+        start: words[0].start,
+        // Hold each part until the next one starts, so captions don't flicker off between words.
+        end: next ? next.start : cue.end,
+        text: words.map((w) => w.text).join(" "),
+        words,
+      });
+    }
+    return parts;
+  });
+}

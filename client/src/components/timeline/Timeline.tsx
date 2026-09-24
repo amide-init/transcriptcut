@@ -39,7 +39,10 @@ export function Timeline() {
   const silenceGaps = useTranscriptStore((s) => s.silenceGaps);
 
   const videoUrl = useProjectStore((s) => s.videoUrl);
-  const audioBuffer = useWaveform(videoUrl);
+  const audioUrl = useProjectStore((s) => s.audioUrl);
+  // Prefer the small extracted speech track; projects transcribed before it
+  // existed fall back to decoding the video's own audio.
+  const audioBuffer = useWaveform(audioUrl ?? videoUrl);
 
   const operations = useTimelineStore((s) => s.operations);
   const undo = useTimelineStore((s) => s.undo);

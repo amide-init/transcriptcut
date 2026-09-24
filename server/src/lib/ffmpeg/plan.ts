@@ -64,6 +64,141 @@ function escapeFilterOptionValue(v: string): string {
   return v.replace(/\\/g, "\\\\").replace(/:/g, "\\:").replace(/'/g, "\\'");
 }
 
+function assertValidRanges(playableRanges: PlayableRange[]): void {
+  if (playableRanges.length === 0) {
+    throw new Error("Nothing to render -- the entire video has been cut.");
+  }
+  for (const r of playableRanges) {
+    if (!Number.isFinite(r.start) || !Number.isFinite(r.end) || r.start < 0 || r.end <= r.start) {
+      throw new Error(`Invalid playable range: ${JSON.stringify(r)}`);
+    }
+  }
+}
+
+/**
+ * Crossfade length at each join: entry i is the fade between range i-1 and
+ * range i (entry 0 is unused). Each is clamped to at most half of either
+ * adjacent segment's own (pre-join) length, so a short surviving sliver
+ * between two nearby cuts can't make the transition eat more than that
+ * sliver. Shared by the video and audio graphs so they stay in sync.
+ */
+function computeCrossfades(playableRanges: PlayableRange[]): number[] {
+  return playableRanges.map((r, i) => {
+    if (i === 0) return 0;
+    const previous = playableRanges[i - 1];
+    return Math.min(CUT_CROSSFADE_SECONDS, (previous.end - previous.start) / 2, (r.end - r.start) / 2);
+  });
+}
+
+/** atrim + acrossfade chains ending in [outa]: the edited program's audio, before any cleanup. */
+function buildAudioEditChains(playableRanges: PlayableRange[]): string[] {
+  const chains = playableRanges.map(
+    (r, i) => `[0:a]atrim=start=${r.start.toFixed(3)}:end=${r.end.toFixed(3)},asetpts=PTS-STARTPTS[a${i}]`
+  );
+  if (playableRanges.length === 1) {
+    chains.push("[a0]anull[outa]");
+    return chains;
+  }
+  const crossfades = computeCrossfades(playableRanges);
+  let label = "a0";
+  for (let i = 1; i < playableRanges.length; i++) {
+    const next = i === playableRanges.length - 1 ? "outa" : `ax${i}`;
+    chains.push(`[${label}][a${i}]acrossfade=d=${crossfades[i].toFixed(3)}[${next}]`);
+    label = next;
+  }
+  return chains;
+}
+
+/**
+ * ffmpeg argv for loudnorm's first (measure-only) pass over the edited
+ * program's audio, with the same cuts/crossfades and pre-loudness cleanup
+ * the export will apply -- so the second pass targets exactly what ships.
+ * Writes no file; the measurement is printed to stderr as JSON.
+ */
+export function buildLoudnessAnalysisArgs(args: {
+  inputPath: string;
+  playableRanges: PlayableRange[];
+  /** From audio-filters.ts#buildLoudnessAnalysisChain. */
+  analysisChain: string;
+}): string[] {
+  assertValidRanges(args.playableRanges);
+  const chains = [...buildAudioEditChains(args.playableRanges), `[outa]${args.analysisChain}[analysis]`];
+  return ["-i", args.inputPath, "-filter_complex", chains.join(";"), "-map", "[analysis]", "-f", "null", "-"];
+}
+
+/** Encoder settings per audio-only output container. */
+const AUDIO_ONLY_CODEC_ARGS: Record<"m4a" | "mp3" | "wav", string[]> = {
+  m4a: ["-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart"],
+  // 44.1kHz is the podcast-host norm, and at lower source rates (e.g. 22.05kHz)
+  // MP3 can't reach 192k -- measured: a 22.05kHz source came out at 160k.
+  // ID3v2.3 is what podcast apps and hosts read most reliably (v2.4 support is patchy).
+  mp3: ["-c:a", "libmp3lame", "-b:a", "192k", "-ar", "44100", "-id3v2_version", "3"],
+  wav: ["-c:a", "pcm_s16le"],
+};
+
+/**
+ * ffmpeg argv for an audio-only render of the edited program, with the same
+ * cuts/crossfades as the video export and an optional cleanup chain. Used
+ * for MP3/WAV podcast exports and the before/after audio preview (m4a).
+ *
+ * metadataPath, when given, is an FFMETADATA file (lib/publishing/chapters.ts
+ * #toFfmetadata) whose title and chapter markers are copied into the output.
+ * Ignored for WAV, which has no chapter support.
+ */
+export function buildAudioOnlyRenderArgs(args: {
+  inputPath: string;
+  outputPath: string;
+  playableRanges: PlayableRange[];
+  audioFilter?: string | null;
+  format?: "m4a" | "mp3" | "wav";
+  metadataPath?: string;
+}): string[] {
+  assertValidRanges(args.playableRanges);
+  const format = args.format ?? "m4a";
+  const chains = buildAudioEditChains(args.playableRanges);
+  let label = "[outa]";
+  if (args.audioFilter) {
+    chains.push(`[outa]${args.audioFilter}[cleana]`);
+    label = "[cleana]";
+  }
+  const metadataPath = format === "wav" ? undefined : args.metadataPath;
+  return [
+    "-y",
+    "-i",
+    args.inputPath,
+    ...(metadataPath ? ["-i", metadataPath] : []),
+    "-filter_complex",
+    chains.join(";"),
+    "-map",
+    label,
+    ...(metadataPath ? ["-map_metadata", "1", "-map_chapters", "1"] : []),
+    ...AUDIO_ONLY_CODEC_ARGS[format],
+    args.outputPath,
+  ];
+}
+
+/**
+ * Crop to the target aspect ratio (full height, sliding horizontally by
+ * cropX, when the source is wider; full width, centered vertically, when it
+ * is taller), then scale to the exact output size. Every value is a
+ * validated number, and the expression quoting keeps its commas inside the
+ * filter option.
+ */
+function buildReframeFilter({ width, height, cropX }: { width: number; height: number; cropX: number }): string {
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0 || width > 4096 || height > 4096) {
+    throw new Error(`Invalid reframe size: ${width}x${height}`);
+  }
+  if (!Number.isFinite(cropX)) throw new Error("Invalid crop position.");
+  const ratio = (width / height).toFixed(6);
+  const x = Math.min(1, Math.max(0, cropX)).toFixed(4);
+  const even = (expr: string) => `trunc((${expr})/2)*2`;
+  return (
+    `crop=w='${even(`if(gt(iw/ih,${ratio}),ih*${ratio},iw)`)}'` +
+    `:h='${even(`if(gt(iw/ih,${ratio}),ih,iw/${ratio})`)}'` +
+    `:x='(iw-ow)*${x}':y='(ih-oh)/2',scale=${width}:${height},setsar=1`
+  );
+}
+
 /**
  * Builds the full ffmpeg argv (as an array, never a shell string) for
  * rendering a project: cut out everything except the playable ranges
@@ -113,6 +248,21 @@ export function buildRenderArgs(args: {
    */
   videoWidth?: number;
   videoHeight?: number;
+  /**
+   * Audio cleanup chain applied to the edited audio (from
+   * audio-filters.ts#buildAudioFilterChain), or null/undefined for none.
+   */
+  audioFilter?: string | null;
+  /** FFMETADATA file with the episode title and chapter markers to embed (see buildAudioOnlyRenderArgs). */
+  metadataPath?: string;
+  /**
+   * Reframe to a different output size (clips: 9:16, 1:1...), cropping the
+   * source to the target aspect first. cropX (0..1) picks the horizontal
+   * position when the source is wider than the target. Applied before
+   * captions and logo, so those are laid out on the reframed frame --
+   * callers pass the output size as videoWidth/videoHeight.
+   */
+  reframe?: { width: number; height: number; cropX: number };
 }): string[] {
   const {
     inputPath,
@@ -129,59 +279,50 @@ export function buildRenderArgs(args: {
     logoOpacity,
     videoWidth,
     videoHeight,
+    audioFilter,
+    metadataPath,
+    reframe,
   } = args;
 
-  if (playableRanges.length === 0) {
-    throw new Error("Nothing to render -- the entire video has been cut.");
-  }
-  for (const r of playableRanges) {
-    if (!Number.isFinite(r.start) || !Number.isFinite(r.end) || r.start < 0 || r.end <= r.start) {
-      throw new Error(`Invalid playable range: ${JSON.stringify(r)}`);
-    }
-  }
+  assertValidRanges(playableRanges);
 
   const filterChains: string[] = [];
   playableRanges.forEach((r, i) => {
-    const start = r.start.toFixed(3);
-    const end = r.end.toFixed(3);
-    filterChains.push(`[0:v]trim=start=${start}:end=${end},setpts=PTS-STARTPTS[v${i}]`);
-    filterChains.push(`[0:a]atrim=start=${start}:end=${end},asetpts=PTS-STARTPTS[a${i}]`);
+    filterChains.push(`[0:v]trim=start=${r.start.toFixed(3)}:end=${r.end.toFixed(3)},setpts=PTS-STARTPTS[v${i}]`);
   });
 
   if (playableRanges.length === 1) {
-    filterChains.push(`[v0][a0]concat=n=1:v=1:a=1[outv][outa]`);
+    filterChains.push(`[v0]null[outv]`);
   } else {
-    // Chain xfade/acrossfade pairwise across every cut instead of a plain
-    // concat. xfade's offset is where the transition starts inside the
+    // Chain xfade pairwise across every cut instead of a plain concat.
+    // xfade's offset is where the transition starts inside the
     // *combined-so-far* stream, so it has to be tracked cumulatively as
     // each pair is joined (this is the standard idiom for chaining more
     // than one xfade) -- verified against a real ffmpeg render, not just
     // the filter's documented options, since offset math like this is easy
-    // to get subtly wrong. Each individual crossfade is clamped to at most
-    // half of either adjacent segment's own (pre-join) length, so a short
-    // surviving sliver between two nearby cuts can't make the transition
-    // eat more than that sliver.
+    // to get subtly wrong. The audio side uses the same crossfade lengths
+    // (see buildAudioEditChains).
+    const crossfades = computeCrossfades(playableRanges);
     let videoLabel = "v0";
-    let audioLabel = "a0";
     let cumulativeDuration = playableRanges[0].end - playableRanges[0].start;
-    let previousSegmentDuration = cumulativeDuration;
     for (let i = 1; i < playableRanges.length; i++) {
       const segmentDuration = playableRanges[i].end - playableRanges[i].start;
-      const crossfade = Math.min(CUT_CROSSFADE_SECONDS, previousSegmentDuration / 2, segmentDuration / 2);
+      const crossfade = crossfades[i];
       const offset = (cumulativeDuration - crossfade).toFixed(3);
-      const duration = crossfade.toFixed(3);
-      const isLast = i === playableRanges.length - 1;
-      const nextVideoLabel = isLast ? "outv" : `vx${i}`;
-      const nextAudioLabel = isLast ? "outa" : `ax${i}`;
+      const nextVideoLabel = i === playableRanges.length - 1 ? "outv" : `vx${i}`;
       filterChains.push(
-        `[${videoLabel}][v${i}]xfade=transition=fade:duration=${duration}:offset=${offset}[${nextVideoLabel}]`
+        `[${videoLabel}][v${i}]xfade=transition=fade:duration=${crossfade.toFixed(3)}:offset=${offset}[${nextVideoLabel}]`
       );
-      filterChains.push(`[${audioLabel}][a${i}]acrossfade=d=${duration}[${nextAudioLabel}]`);
       videoLabel = nextVideoLabel;
-      audioLabel = nextAudioLabel;
       cumulativeDuration = cumulativeDuration + segmentDuration - crossfade;
-      previousSegmentDuration = segmentDuration;
     }
+  }
+
+  filterChains.push(...buildAudioEditChains(playableRanges));
+  let audioOutLabel = "[outa]";
+  if (audioFilter) {
+    filterChains.push(`[outa]${audioFilter}[cleana]`);
+    audioOutLabel = "[cleana]";
   }
 
   let videoOutLabel = "[outv]";
@@ -191,6 +332,11 @@ export function buildRenderArgs(args: {
   if (colorFilter) {
     filterChains.push(`[outv]${colorFilter}[filtered]`);
     videoOutLabel = "[filtered]";
+  }
+
+  if (reframe) {
+    filterChains.push(`${videoOutLabel}${buildReframeFilter(reframe)}[reframed]`);
+    videoOutLabel = "[reframed]";
   }
 
   if (srtPath) {
@@ -249,17 +395,22 @@ export function buildRenderArgs(args: {
     videoOutLabel = "[logoed]";
   }
 
+  // The metadata file is the last input: after the source and, if present, the logo.
+  const metadataInputIndex = String(logoPath && logoPosition ? 2 : 1);
+
   return [
     "-y",
     "-i",
     inputPath,
     ...(logoPath && logoPosition ? ["-i", logoPath] : []),
+    ...(metadataPath ? ["-i", metadataPath] : []),
     "-filter_complex",
     filterChains.join(";"),
     "-map",
     videoOutLabel,
     "-map",
-    "[outa]",
+    audioOutLabel,
+    ...(metadataPath ? ["-map_metadata", metadataInputIndex, "-map_chapters", metadataInputIndex] : []),
     "-c:v",
     "libx264",
     "-c:a",

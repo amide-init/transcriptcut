@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildRenderArgs } from "@/lib/ffmpeg/plan";
+import { buildAudioOnlyRenderArgs, buildLoudnessAnalysisArgs, buildRenderArgs } from "@/lib/ffmpeg/plan";
 import { DEFAULT_CAPTION_STYLE } from "@/lib/captions/style";
 import { DEFAULT_VIDEO_PROPERTIES } from "@/types/video-properties";
 
@@ -54,7 +54,8 @@ describe("buildRenderArgs: basic structure", () => {
     const filterComplex = argv[argv.indexOf("-filter_complex") + 1];
     expect(filterComplex).toContain("[0:v]trim=start=0.000:end=10.000,setpts=PTS-STARTPTS[v0]");
     expect(filterComplex).toContain("[0:a]atrim=start=0.000:end=10.000,asetpts=PTS-STARTPTS[a0]");
-    expect(filterComplex).toContain("[v0][a0]concat=n=1:v=1:a=1[outv][outa]");
+    expect(filterComplex).toContain("[v0]null[outv]");
+    expect(filterComplex).toContain("[a0]anull[outa]");
   });
 
   it("trims multiple playable ranges and crossfades across the cut between them", () => {
@@ -213,5 +214,124 @@ describe("buildRenderArgs: logo overlay", () => {
     const filterComplex = argv[argv.indexOf("-filter_complex") + 1];
     expect(argv).toContain("[logoed]");
     expect(filterComplex).toMatch(/\[captioned\]\[logosrc\]overlay=.*\[logoed\]/);
+  });
+});
+
+describe("buildRenderArgs: audio cleanup", () => {
+  it("maps the edited audio straight through when no audio filter is set", () => {
+    const argv = buildRenderArgs(baseArgs);
+    expect(argv[argv.indexOf("[outv]") + 2]).toBe("[outa]");
+    expect(argv.join(" ")).not.toContain("[cleana]");
+  });
+
+  it("applies the audio filter after the cuts and maps the cleaned stream", () => {
+    const argv = buildRenderArgs({ ...baseArgs, audioFilter: "highpass=f=80" });
+    const filterComplex = argv[argv.indexOf("-filter_complex") + 1];
+    expect(filterComplex).toContain("[outa]highpass=f=80[cleana]");
+    expect(argv).toEqual(expect.arrayContaining(["-map", "[cleana]"]));
+    expect(argv).not.toContain("[outa]");
+  });
+});
+
+describe("buildLoudnessAnalysisArgs", () => {
+  it("measures the edited audio only, with the same crossfades as the export, writing nothing", () => {
+    const playableRanges = [
+      { start: 0, end: 3 },
+      { start: 5, end: 8 },
+    ];
+    const argv = buildLoudnessAnalysisArgs({
+      inputPath: "/data/in.mp4",
+      playableRanges,
+      analysisChain: "loudnorm=I=-16:print_format=json",
+    });
+    const filterComplex = argv[argv.indexOf("-filter_complex") + 1];
+    expect(filterComplex).not.toContain("[0:v]");
+    expect(filterComplex).toContain("[a0][a1]acrossfade=d=0.030[outa]");
+    expect(filterComplex).toContain("[outa]loudnorm=I=-16:print_format=json[analysis]");
+    expect(argv.slice(-3)).toEqual(["-f", "null", "-"]);
+
+    const exportComplex = buildRenderArgs({ ...baseArgs, playableRanges });
+    expect(exportComplex[exportComplex.indexOf("-filter_complex") + 1]).toContain("[a0][a1]acrossfade=d=0.030[outa]");
+  });
+
+  it("rejects invalid ranges like the export does", () => {
+    expect(() =>
+      buildLoudnessAnalysisArgs({ inputPath: "/in.mp4", playableRanges: [], analysisChain: "loudnorm" })
+    ).toThrow(/entire video has been cut/);
+  });
+});
+
+describe("chapter metadata", () => {
+  it("adds the metadata file as the input after the source and maps its metadata and chapters", () => {
+    const argv = buildRenderArgs({ ...baseArgs, metadataPath: "/data/meta.ffmeta" });
+    expect(argv.slice(0, 5)).toEqual(["-y", "-i", "/data/in.mp4", "-i", "/data/meta.ffmeta"]);
+    expect(argv.join(" ")).toContain("-map_metadata 1 -map_chapters 1");
+  });
+
+  it("indexes the metadata input after the logo when there is one", () => {
+    const argv = buildRenderArgs({
+      ...baseArgs,
+      logoPath: "/data/logo.png",
+      logoPosition: "bottom-right",
+      videoWidth: 1920,
+      videoHeight: 1080,
+      metadataPath: "/data/meta.ffmeta",
+    });
+    expect(argv.slice(1, 7)).toEqual(["-i", "/data/in.mp4", "-i", "/data/logo.png", "-i", "/data/meta.ffmeta"]);
+    expect(argv.join(" ")).toContain("-map_metadata 2 -map_chapters 2");
+  });
+
+  it("leaves metadata mapping out entirely when there's no file", () => {
+    expect(buildRenderArgs(baseArgs)).not.toContain("-map_chapters");
+  });
+});
+
+describe("buildAudioOnlyRenderArgs", () => {
+  const audio = { inputPath: "/in.mp4", outputPath: "/out", playableRanges: [{ start: 0, end: 10 }] };
+
+  it("encodes MP3 with ID3v2.3 and embeds chapters", () => {
+    const argv = buildAudioOnlyRenderArgs({ ...audio, format: "mp3", metadataPath: "/m.ffmeta" });
+    expect(argv.join(" ")).toContain("-c:a libmp3lame -b:a 192k -ar 44100 -id3v2_version 3");
+    expect(argv.join(" ")).toContain("-map_metadata 1 -map_chapters 1");
+    expect(argv.join(" ")).not.toContain("[0:v]");
+  });
+
+  it("writes WAV as 16-bit PCM and skips chapters, which WAV can't hold", () => {
+    const argv = buildAudioOnlyRenderArgs({ ...audio, format: "wav", metadataPath: "/m.ffmeta" });
+    expect(argv.join(" ")).toContain("-c:a pcm_s16le");
+    expect(argv).not.toContain("/m.ffmeta");
+  });
+
+  it("defaults to AAC in m4a for previews", () => {
+    expect(buildAudioOnlyRenderArgs(audio).join(" ")).toContain("-c:a aac -b:a 160k");
+  });
+});
+
+describe("reframe", () => {
+  it("crops to the target aspect at cropX, then scales, before captions and logo", () => {
+    const argv = buildRenderArgs({
+      ...baseArgs,
+      srtPath: "/data/c.ass",
+      logoPath: "/data/logo.png",
+      logoPosition: "top-right",
+      videoWidth: 1080,
+      videoHeight: 1920,
+      reframe: { width: 1080, height: 1920, cropX: 0.25 },
+    });
+    const graph = argv[argv.indexOf("-filter_complex") + 1];
+    expect(graph).toContain(
+      "[outv]crop=w='trunc((if(gt(iw/ih,0.562500),ih*0.562500,iw))/2)*2':h='trunc((if(gt(iw/ih,0.562500),ih,iw/0.562500))/2)*2':x='(iw-ow)*0.2500':y='(ih-oh)/2',scale=1080:1920,setsar=1[reframed]"
+    );
+    expect(graph.indexOf("[reframed]subtitles")).toBeGreaterThan(-1);
+    expect(graph.indexOf("[captioned][logosrc]overlay")).toBeGreaterThan(-1);
+  });
+
+  it("clamps cropX and rejects nonsense sizes", () => {
+    const argv = buildRenderArgs({ ...baseArgs, reframe: { width: 1080, height: 1080, cropX: 7 } });
+    expect(argv[argv.indexOf("-filter_complex") + 1]).toContain("x='(iw-ow)*1.0000'");
+    expect(() => buildRenderArgs({ ...baseArgs, reframe: { width: 0, height: 1920, cropX: 0.5 } })).toThrow(
+      /Invalid reframe size/
+    );
+    expect(() => buildRenderArgs({ ...baseArgs, reframe: { width: 1080.5, height: 1920, cropX: 0.5 } })).toThrow();
   });
 });

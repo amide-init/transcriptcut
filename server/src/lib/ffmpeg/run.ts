@@ -20,14 +20,23 @@ export class FfmpegNotFoundError extends Error {
  * ffmpeg build lacks libass and can't burn in captions, but a full build
  * (e.g. `ffmpeg-full`) is installed alongside it.
  */
-export function runFfmpeg(args: string[]): Promise<void> {
+export async function runFfmpeg(args: string[]): Promise<void> {
+  await runFfmpegCapturingStderr(args);
+}
+
+/**
+ * Same as runFfmpeg, but resolves with ffmpeg's stderr on success -- for
+ * analysis passes (e.g. silencedetect) whose results ffmpeg only reports as
+ * log lines, never as an output file.
+ */
+export function runFfmpegCapturingStderr(args: string[]): Promise<string> {
   const binary = process.env.FFMPEG_PATH || "ffmpeg";
   return new Promise((resolve, reject) => {
     // turbopackIgnore: binary is an external system executable (resolved via
     // PATH or FFMPEG_PATH), never a project file -- it must not be traced.
-    execFile(/* turbopackIgnore: true */ binary, args, { maxBuffer: 1024 * 1024 * 10 }, (error, _stdout, stderr) => {
+    execFile(/* turbopackIgnore: true */ binary, args, { maxBuffer: 1024 * 1024 * 50 }, (error, _stdout, stderr) => {
       if (!error) {
-        resolve();
+        resolve(stderr);
         return;
       }
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
