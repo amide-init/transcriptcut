@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import { prisma } from "@/lib/db/client";
-import { runRenderJob } from "@/lib/ffmpeg/render-job";
+import { EXPORT_MIME_TYPES, runRenderJob } from "@/lib/ffmpeg/render-job";
+import { exportFormatSchema } from "@/lib/validation/publishing";
+import type { ExportFormat } from "@/types/publishing";
 import { captionStyleSchema } from "@/lib/validation/caption-style";
 import { resolveInDataDir } from "@/lib/storage/local";
 import { errorResponse } from "@/lib/http";
@@ -16,8 +18,16 @@ renderRoute.post("/:id/render", async (c) => {
 
   let burnInCaptions = false;
   let captionStyle: CaptionStyle | undefined;
+  let format: ExportFormat = "mp4";
   try {
     const body = await c.req.json();
+    if (body?.format !== undefined) {
+      const parsedFormat = exportFormatSchema.safeParse(body.format);
+      if (!parsedFormat.success) {
+        return errorResponse(c, "INVALID_FORMAT", "Export format must be mp4, mp3 or wav.", 400);
+      }
+      format = parsedFormat.data;
+    }
     burnInCaptions = body?.burnInCaptions === true;
     if (burnInCaptions && body?.captionStyle !== undefined) {
       const parsed = captionStyleSchema.safeParse(body.captionStyle);
@@ -38,7 +48,7 @@ renderRoute.post("/:id/render", async (c) => {
     return errorResponse(c, "NO_VIDEO", "This project has no video to render.", 400);
   }
 
-  const job = await prisma.renderJob.create({ data: { projectId: id, status: "queued" } });
+  const job = await prisma.renderJob.create({ data: { projectId: id, status: "queued", format } });
 
   // Fire-and-forget: never block the request on FFmpeg (spec section 14).
   // No `waitUntil` needed here -- Bun.serve() is one long-lived process, not
@@ -145,12 +155,14 @@ renderRoute.get("/:id/render/:jobId/download", async (c) => {
   }
 
   const project = await prisma.project.findUnique({ where: { id }, select: { name: true } });
-  const filename = `${(project?.name ?? "video").replace(/[^a-zA-Z0-9_-]/g, "_")}.mp4`;
+  const parsedFormat = exportFormatSchema.safeParse(job.format);
+  const format: ExportFormat = parsedFormat.success ? parsedFormat.data : "mp4";
+  const filename = `${(project?.name ?? "video").replace(/[^a-zA-Z0-9_-]/g, "_")}.${format}`;
 
   const file = Bun.file(resolveInDataDir(job.outputPath));
   return new Response(file, {
     headers: {
-      "Content-Type": "video/mp4",
+      "Content-Type": EXPORT_MIME_TYPES[format],
       "Content-Disposition": `attachment; filename="${filename}"`,
     },
   });

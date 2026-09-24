@@ -4,7 +4,11 @@ import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/db/client";
 import { resolveInDataDir, statAsset } from "@/lib/storage/local";
 import { computePlayableRanges } from "@/lib/timeline/cuts";
-import { buildLoudnessAnalysisArgs, buildRenderArgs } from "@/lib/ffmpeg/plan";
+import { buildAudioOnlyRenderArgs, buildLoudnessAnalysisArgs, buildRenderArgs } from "@/lib/ffmpeg/plan";
+import { resolveChapters, toFfmetadata } from "@/lib/publishing/chapters";
+import { getEditedDuration } from "@/lib/timeline/cuts";
+import { exportFormatSchema } from "@/lib/validation/publishing";
+import type { Chapter, ExportFormat } from "@/types/publishing";
 import {
   buildAudioFilterChain,
   buildLoudnessAnalysisChain,
@@ -97,6 +101,12 @@ export async function resolveLoudnessGain(
   }
 }
 
+export const EXPORT_MIME_TYPES: Record<ExportFormat, string> = {
+  mp4: "video/mp4",
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+};
+
 /**
  * Runs one render job to completion and updates its RenderJob row along the
  * way (queued -> processing -> completed/failed). Called fire-and-forget
@@ -113,9 +123,12 @@ export async function runRenderJob(
     const job = await prisma.renderJob.findUniqueOrThrow({ where: { id: jobId } });
     const project = await prisma.project.findUnique({
       where: { id: job.projectId },
-      include: { assets: true, editOperations: true, transcript: true },
+      include: { assets: true, editOperations: true, transcript: true, publishingMeta: true },
     });
     if (!project) throw new Error("Project not found.");
+    const parsedFormat = exportFormatSchema.safeParse(job.format);
+    const format: ExportFormat = parsedFormat.success ? parsedFormat.data : "mp4";
+    const isVideo = format === "mp4";
     if (project.duration === null) throw new Error("Video duration isn't known yet -- open the project once first.");
 
     const originalAsset = project.assets.find((a) => a.kind === "original");
@@ -128,7 +141,7 @@ export async function runRenderJob(
     const playableRanges = computePlayableRanges(project.duration, cuts);
 
     const inputPath = resolveInDataDir(originalAsset.filePath);
-    const outputRelativePath = path.posix.join("projects", project.id, "render", `${jobId}.mp4`);
+    const outputRelativePath = path.posix.join("projects", project.id, "render", `${jobId}.${format}`);
     const outputPath = resolveInDataDir(outputRelativePath);
     await mkdir(path.dirname(outputPath), { recursive: true });
 
@@ -137,17 +150,20 @@ export async function runRenderJob(
     // burn it in as a self-styled .ass file with libass karaoke (\k) tags instead,
     // and skip force_style entirely (the file's own [V4+ Styles] line already has
     // the chosen font/size/colors/position/background baked in).
-    const useKaraoke = options.burnInCaptions && options.captionStyle?.wordHighlight === true;
+    // Captions, logo and color are video-only; an MP3/WAV export skips them.
+    const burnInCaptions = isVideo && options.burnInCaptions;
+    const useLogo = isVideo && Boolean(logoAsset);
+    const useKaraoke = burnInCaptions && options.captionStyle?.wordHighlight === true;
 
     // Needed to size the logo overlay relative to the frame, and to convert
     // force_style's fontSize/margin from percent-of-frame into the literal
     // output pixels it actually requires (see ffmpeg/plan.ts) -- skip the
     // probe when neither applies. The karaoke .ass path doesn't need this:
     // it scales itself via PlayResX/Y instead (see lib/captions/format.ts).
-    const needsVideoDimensions = Boolean(logoAsset) || (options.burnInCaptions && !useKaraoke);
+    const needsVideoDimensions = useLogo || (burnInCaptions && !useKaraoke);
     const videoDimensions = needsVideoDimensions ? await probeVideoDimensions(inputPath) : undefined;
 
-    if (options.burnInCaptions) {
+    if (burnInCaptions) {
       if (!project.transcript) throw new Error("Captions were requested but this project has no transcript.");
       const transcript: Transcript = {
         id: project.transcript.id,
@@ -169,23 +185,40 @@ export async function runRenderJob(
       await resolveLoudnessGain(inputPath, playableRanges, audioSettings, jobId)
     );
 
-    const args = buildRenderArgs({
-      inputPath,
-      outputPath,
-      playableRanges,
-      filterId: project.filterId,
-      properties: project.propertiesJson ? JSON.parse(project.propertiesJson) : DEFAULT_VIDEO_PROPERTIES,
-      srtPath: subtitlesPath,
-      captionStyle: subtitlesPath && !useKaraoke ? (options.captionStyle ?? DEFAULT_CAPTION_STYLE) : undefined,
-      logoPath: logoAsset ? resolveInDataDir(logoAsset.filePath) : undefined,
-      logoPosition: logoAsset ? toLogoPosition(project.logoPosition) : undefined,
-      logoPaddingX: logoAsset ? project.logoPaddingX : undefined,
-      logoPaddingY: logoAsset ? project.logoPaddingY : undefined,
-      logoOpacity: logoAsset ? project.logoOpacity : undefined,
-      videoWidth: videoDimensions?.width,
-      videoHeight: videoDimensions?.height,
-      audioFilter,
-    });
+    // Episode title + chapter markers, embedded so podcast apps and players
+    // show them. Chapters are stored in source time and placed on the edited
+    // timeline here, so they follow whatever cuts were made after generation.
+    const chapters: Chapter[] = project.publishingMeta?.chaptersJson
+      ? JSON.parse(project.publishingMeta.chaptersJson)
+      : [];
+    const metadataRelativePath = path.posix.join("projects", project.id, "render", `${jobId}.ffmeta`);
+    const metadataPath = resolveInDataDir(metadataRelativePath);
+    await writeFile(
+      metadataPath,
+      toFfmetadata(resolveChapters(chapters, playableRanges), getEditedDuration(playableRanges), project.name),
+      "utf-8"
+    );
+
+    const args = isVideo
+      ? buildRenderArgs({
+          inputPath,
+          outputPath,
+          playableRanges,
+          filterId: project.filterId,
+          properties: project.propertiesJson ? JSON.parse(project.propertiesJson) : DEFAULT_VIDEO_PROPERTIES,
+          srtPath: subtitlesPath,
+          captionStyle: subtitlesPath && !useKaraoke ? (options.captionStyle ?? DEFAULT_CAPTION_STYLE) : undefined,
+          logoPath: useLogo ? resolveInDataDir(logoAsset!.filePath) : undefined,
+          logoPosition: useLogo ? toLogoPosition(project.logoPosition) : undefined,
+          logoPaddingX: useLogo ? project.logoPaddingX : undefined,
+          logoPaddingY: useLogo ? project.logoPaddingY : undefined,
+          logoOpacity: useLogo ? project.logoOpacity : undefined,
+          videoWidth: videoDimensions?.width,
+          videoHeight: videoDimensions?.height,
+          audioFilter,
+          metadataPath,
+        })
+      : buildAudioOnlyRenderArgs({ inputPath, outputPath, playableRanges, audioFilter, format, metadataPath });
     await runFfmpeg(args);
 
     const stats = await statAsset(outputRelativePath);
@@ -194,7 +227,7 @@ export async function runRenderJob(
         projectId: project.id,
         kind: "render",
         filePath: outputRelativePath,
-        mimeType: "video/mp4",
+        mimeType: EXPORT_MIME_TYPES[format],
         sizeBytes: stats.size,
       },
     });

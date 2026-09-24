@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildLoudnessAnalysisArgs, buildRenderArgs } from "@/lib/ffmpeg/plan";
+import { buildAudioOnlyRenderArgs, buildLoudnessAnalysisArgs, buildRenderArgs } from "@/lib/ffmpeg/plan";
 import { DEFAULT_CAPTION_STYLE } from "@/lib/captions/style";
 import { DEFAULT_VIDEO_PROPERTIES } from "@/types/video-properties";
 
@@ -258,5 +258,51 @@ describe("buildLoudnessAnalysisArgs", () => {
     expect(() =>
       buildLoudnessAnalysisArgs({ inputPath: "/in.mp4", playableRanges: [], analysisChain: "loudnorm" })
     ).toThrow(/entire video has been cut/);
+  });
+});
+
+describe("chapter metadata", () => {
+  it("adds the metadata file as the input after the source and maps its metadata and chapters", () => {
+    const argv = buildRenderArgs({ ...baseArgs, metadataPath: "/data/meta.ffmeta" });
+    expect(argv.slice(0, 5)).toEqual(["-y", "-i", "/data/in.mp4", "-i", "/data/meta.ffmeta"]);
+    expect(argv.join(" ")).toContain("-map_metadata 1 -map_chapters 1");
+  });
+
+  it("indexes the metadata input after the logo when there is one", () => {
+    const argv = buildRenderArgs({
+      ...baseArgs,
+      logoPath: "/data/logo.png",
+      logoPosition: "bottom-right",
+      videoWidth: 1920,
+      videoHeight: 1080,
+      metadataPath: "/data/meta.ffmeta",
+    });
+    expect(argv.slice(1, 7)).toEqual(["-i", "/data/in.mp4", "-i", "/data/logo.png", "-i", "/data/meta.ffmeta"]);
+    expect(argv.join(" ")).toContain("-map_metadata 2 -map_chapters 2");
+  });
+
+  it("leaves metadata mapping out entirely when there's no file", () => {
+    expect(buildRenderArgs(baseArgs)).not.toContain("-map_chapters");
+  });
+});
+
+describe("buildAudioOnlyRenderArgs", () => {
+  const audio = { inputPath: "/in.mp4", outputPath: "/out", playableRanges: [{ start: 0, end: 10 }] };
+
+  it("encodes MP3 with ID3v2.3 and embeds chapters", () => {
+    const argv = buildAudioOnlyRenderArgs({ ...audio, format: "mp3", metadataPath: "/m.ffmeta" });
+    expect(argv.join(" ")).toContain("-c:a libmp3lame -b:a 192k -ar 44100 -id3v2_version 3");
+    expect(argv.join(" ")).toContain("-map_metadata 1 -map_chapters 1");
+    expect(argv.join(" ")).not.toContain("[0:v]");
+  });
+
+  it("writes WAV as 16-bit PCM and skips chapters, which WAV can't hold", () => {
+    const argv = buildAudioOnlyRenderArgs({ ...audio, format: "wav", metadataPath: "/m.ffmeta" });
+    expect(argv.join(" ")).toContain("-c:a pcm_s16le");
+    expect(argv).not.toContain("/m.ffmeta");
+  });
+
+  it("defaults to AAC in m4a for previews", () => {
+    expect(buildAudioOnlyRenderArgs(audio).join(" ")).toContain("-c:a aac -b:a 160k");
   });
 });
