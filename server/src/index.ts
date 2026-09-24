@@ -15,6 +15,7 @@ import { captionsRoute } from "@/routes/captions";
 import { logoRoute } from "@/routes/logo";
 import { renderRoute } from "@/routes/render";
 import { settingsRoute } from "@/routes/settings";
+import { publishingRoute } from "@/routes/publishing";
 import { prisma } from "@/lib/db/client";
 import { getMaxUploadBytes } from "@/lib/limits";
 
@@ -33,6 +34,7 @@ app.route("/api/projects", fillerWordsRoute);
 app.route("/api/projects", captionsRoute);
 app.route("/api/projects", logoRoute);
 app.route("/api/projects", renderRoute);
+app.route("/api/projects", publishingRoute);
 app.route("/api/settings", settingsRoute);
 
 // Serves the built Vite client (server-bundle/client-dist in the packaged

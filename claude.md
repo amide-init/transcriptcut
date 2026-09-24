@@ -592,6 +592,18 @@ to dynamic mode and undershoots on peaky speech); `render-job.ts#resolveLoudness
 measures and corrects with secant steps. Defaults are all off, so exports
 are unchanged unless a user opts in.
 
+## Podcast publishing
+
+`PublishingMeta` (one per project) holds AI-generated, user-editable
+chapters and show notes (`server/src/types/publishing.ts`). The model
+(gpt-4o-mini) only returns text and *sentence indices* -- chapter starts
+come from those sentences' own timestamps, never from a time the model
+wrote. Chapters are stored in **source** time and mapped onto the edited
+timeline when shown or exported (`lib/publishing/chapters.ts`), so later
+cuts don't strand them. Every export (MP4, and MP3 at 44.1kHz/192k) embeds
+the episode title and chapters via a generated FFMETADATA file; WAV can't
+hold chapters. AI output never changes the edit.
+
 ---
 
 # 13. Architecture (local-first)
@@ -842,9 +854,14 @@ GET    /api/projects/:id/transcript
 POST   /api/projects/:id/operations
 DELETE /api/projects/:id/operations/:operationId
 
-POST   /api/projects/:id/render
+POST   /api/projects/:id/render                 (body: format mp4|mp3|wav, captions)
 GET    /api/projects/:id/render/:jobId
 POST   /api/projects/:id/render/audio-preview   (15s before/after sample of the audio settings)
+
+GET    /api/projects/:id/publishing                 (chapters on the edited timeline + show notes)
+POST   /api/projects/:id/publishing/chapters        (AI-generate)   PUT (save user edits)
+POST   /api/projects/:id/publishing/show-notes      (AI-generate)   PUT (save user edits)
+GET    /api/projects/:id/transcript/export?format=txt|md
 ```
 
 (No `POST /api/projects/:id/ai/edit` — the free-text AI command bar this

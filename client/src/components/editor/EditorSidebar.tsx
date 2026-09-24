@@ -1,19 +1,21 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AudioLines, Captions, ChevronLeft, ChevronRight, ImagePlus, SlidersHorizontal, Sliders, Wand2 } from "lucide-react";
+import { AudioLines, BookOpenText, Captions, ChevronLeft, ChevronRight, ImagePlus, SlidersHorizontal, Sliders, Wand2 } from "lucide-react";
 import { AiToolsPanel } from "@/components/editor/AiToolsPanel";
 import { FiltersPanel } from "@/components/editor/FiltersPanel";
 import { PropertiesPanel } from "@/components/editor/PropertiesPanel";
 import { ElementsPanel } from "@/components/editor/ElementsPanel";
 import { CaptionsPanel } from "@/components/editor/CaptionsPanel";
 import { AudioPanel } from "@/components/editor/AudioPanel";
+import { PublishPanel } from "@/components/editor/PublishPanel";
 
-type PanelId = "captions" | "audio" | "ai" | "filters" | "properties" | "elements";
+type PanelId = "captions" | "audio" | "publish" | "ai" | "filters" | "properties" | "elements";
 
 const TABS: { id: PanelId; label: string; icon: typeof Wand2 }[] = [
   { id: "captions", label: "Captions", icon: Captions },
   { id: "audio", label: "Audio", icon: AudioLines },
+  { id: "publish", label: "Publish", icon: BookOpenText },
   { id: "ai", label: "AI tools", icon: Wand2 },
   { id: "filters", label: "Filters", icon: SlidersHorizontal },
   { id: "elements", label: "Elements", icon: ImagePlus },
@@ -106,6 +108,7 @@ export function EditorSidebar() {
       <div className="flex-1 overflow-y-auto p-3">
         {activePanel === "captions" && <CaptionsPanel />}
         {activePanel === "audio" && <AudioPanel />}
+        {activePanel === "publish" && <PublishPanel />}
         {activePanel === "ai" && <AiToolsPanel />}
         {activePanel === "filters" && <FiltersPanel />}
         {activePanel === "elements" && <ElementsPanel />}

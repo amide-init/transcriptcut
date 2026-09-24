@@ -126,38 +126,53 @@ export function buildLoudnessAnalysisArgs(args: {
   return ["-i", args.inputPath, "-filter_complex", chains.join(";"), "-map", "[analysis]", "-f", "null", "-"];
 }
 
+/** Encoder settings per audio-only output container. */
+const AUDIO_ONLY_CODEC_ARGS: Record<"m4a" | "mp3" | "wav", string[]> = {
+  m4a: ["-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart"],
+  // 44.1kHz is the podcast-host norm, and at lower source rates (e.g. 22.05kHz)
+  // MP3 can't reach 192k -- measured: a 22.05kHz source came out at 160k.
+  // ID3v2.3 is what podcast apps and hosts read most reliably (v2.4 support is patchy).
+  mp3: ["-c:a", "libmp3lame", "-b:a", "192k", "-ar", "44100", "-id3v2_version", "3"],
+  wav: ["-c:a", "pcm_s16le"],
+};
+
 /**
- * ffmpeg argv for an audio-only render of the edited program (AAC in .m4a),
- * with the same cuts/crossfades as the video export and an optional
- * cleanup chain. Used for the before/after audio preview.
+ * ffmpeg argv for an audio-only render of the edited program, with the same
+ * cuts/crossfades as the video export and an optional cleanup chain. Used
+ * for MP3/WAV podcast exports and the before/after audio preview (m4a).
+ *
+ * metadataPath, when given, is an FFMETADATA file (lib/publishing/chapters.ts
+ * #toFfmetadata) whose title and chapter markers are copied into the output.
+ * Ignored for WAV, which has no chapter support.
  */
 export function buildAudioOnlyRenderArgs(args: {
   inputPath: string;
   outputPath: string;
   playableRanges: PlayableRange[];
   audioFilter?: string | null;
+  format?: "m4a" | "mp3" | "wav";
+  metadataPath?: string;
 }): string[] {
   assertValidRanges(args.playableRanges);
+  const format = args.format ?? "m4a";
   const chains = buildAudioEditChains(args.playableRanges);
   let label = "[outa]";
   if (args.audioFilter) {
     chains.push(`[outa]${args.audioFilter}[cleana]`);
     label = "[cleana]";
   }
+  const metadataPath = format === "wav" ? undefined : args.metadataPath;
   return [
     "-y",
     "-i",
     args.inputPath,
+    ...(metadataPath ? ["-i", metadataPath] : []),
     "-filter_complex",
     chains.join(";"),
     "-map",
     label,
-    "-c:a",
-    "aac",
-    "-b:a",
-    "160k",
-    "-movflags",
-    "+faststart",
+    ...(metadataPath ? ["-map_metadata", "1", "-map_chapters", "1"] : []),
+    ...AUDIO_ONLY_CODEC_ARGS[format],
     args.outputPath,
   ];
 }
@@ -216,6 +231,8 @@ export function buildRenderArgs(args: {
    * audio-filters.ts#buildAudioFilterChain), or null/undefined for none.
    */
   audioFilter?: string | null;
+  /** FFMETADATA file with the episode title and chapter markers to embed (see buildAudioOnlyRenderArgs). */
+  metadataPath?: string;
 }): string[] {
   const {
     inputPath,
@@ -233,6 +250,7 @@ export function buildRenderArgs(args: {
     videoWidth,
     videoHeight,
     audioFilter,
+    metadataPath,
   } = args;
 
   assertValidRanges(playableRanges);
@@ -341,17 +359,22 @@ export function buildRenderArgs(args: {
     videoOutLabel = "[logoed]";
   }
 
+  // The metadata file is the last input: after the source and, if present, the logo.
+  const metadataInputIndex = String(logoPath && logoPosition ? 2 : 1);
+
   return [
     "-y",
     "-i",
     inputPath,
     ...(logoPath && logoPosition ? ["-i", logoPath] : []),
+    ...(metadataPath ? ["-i", metadataPath] : []),
     "-filter_complex",
     filterChains.join(";"),
     "-map",
     videoOutLabel,
     "-map",
     audioOutLabel,
+    ...(metadataPath ? ["-map_metadata", metadataInputIndex, "-map_chapters", metadataInputIndex] : []),
     "-c:v",
     "libx264",
     "-c:a",
