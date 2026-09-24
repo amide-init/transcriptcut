@@ -61,6 +61,13 @@ pub fn run() {
                     "FFMPEG_PATH",
                     "/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg",
                 )
+                // Needed since transcription (audio duration), the editing
+                // proxy and the logo/captions sizing all probe media -- a
+                // bare "ffprobe" isn't on a GUI app's PATH, same as ffmpeg.
+                .env(
+                    "FFPROBE_PATH",
+                    "/opt/homebrew/opt/ffmpeg-full/bin/ffprobe",
+                )
                 .env(
                     "CLIENT_DIST_DIR",
                     server_dir.join("client-dist").display().to_string(),
