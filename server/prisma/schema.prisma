@@ -40,6 +40,25 @@ model Project {
   editOperations    EditOperation[]
   renderJobs        RenderJob[]
   transcriptionJobs TranscriptionJob[]
+  publishingMeta    PublishingMeta?
+}
+
+/// Publishing helpers for a project (claude.md "Podcast publishing"): AI
+/// chapters and show notes, both user-editable after generation. Chapters
+/// are stored in *source* time so later transcript edits don't invalidate
+/// them -- they're mapped onto the edited timeline when shown or exported.
+model PublishingMeta {
+  id        String @id @default(cuid())
+  projectId String @unique
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  /// JSON-serialized Chapter[] (see src/types/publishing.ts), null = none yet.
+  chaptersJson  String?
+  /// JSON-serialized ShowNotes (see src/types/publishing.ts), null = none yet.
+  showNotesJson String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Asset {
@@ -114,6 +133,8 @@ model RenderJob {
 
   /// "export" (full MP4) | "audio-preview" (short before/after audio sample, see lib/ffmpeg/audio-preview.ts)
   kind       String  @default("export")
+  /// Output container for exports: "mp4" (video) | "mp3" | "wav" (audio-only, for podcast feeds).
+  format     String  @default("mp4")
   /// "queued" | "processing" | "completed" | "failed"
   status     String  @default("queued")
   outputPath String?
