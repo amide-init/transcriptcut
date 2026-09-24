@@ -18,7 +18,7 @@ import type { Transcript } from "@/types/transcript";
 /** Parallel Whisper calls per job -- enough to cut a long episode's wait, few enough to stay clear of rate limits. */
 const CHUNK_CONCURRENCY = 3;
 
-async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+export async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const results = new Array<R>(items.length);
   let next = 0;
   const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
@@ -29,6 +29,42 @@ async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T)
   });
   await Promise.all(workers);
   return results;
+}
+
+/**
+ * Extracts the project's small speech-quality audio track (kept as its
+ * "audio" asset -- transcription, speaker detection and the timeline
+ * waveform all read it) and returns its path and duration.
+ */
+export async function extractSpeechAudio(projectId: string): Promise<{ audioPath: string; audioDir: string; duration: number }> {
+  const originalAsset = await prisma.asset.findFirst({ where: { projectId, kind: "original" } });
+  if (!originalAsset) throw new Error("No source video for this project.");
+
+  const audioDir = path.posix.join("projects", projectId, "audio");
+  await mkdir(resolveInDataDir(audioDir), { recursive: true });
+
+  const audioRelativePath = path.posix.join(audioDir, "speech.mp3");
+  const audioPath = resolveInDataDir(audioRelativePath);
+  await runFfmpeg(buildExtractAudioArgs(resolveInDataDir(originalAsset.filePath), audioPath));
+
+  const audioStats = await statAsset(audioRelativePath);
+  await prisma.asset.deleteMany({ where: { projectId, kind: "audio" } });
+  await prisma.asset.create({
+    data: {
+      projectId,
+      kind: "audio",
+      filePath: audioRelativePath,
+      mimeType: "audio/mpeg",
+      sizeBytes: audioStats.size,
+    },
+  });
+  return { audioPath, audioDir, duration: await probeDuration(audioPath) };
+}
+
+/** ~10-minute chunks split at silences (see lib/ai/chunking.ts). */
+export async function planSpeechChunks(audioPath: string, duration: number): Promise<AudioChunk[]> {
+  const silences = parseSilenceDetectOutput(await runFfmpegCapturingStderr(buildSilenceDetectArgs(audioPath)));
+  return planChunks(duration, silences);
 }
 
 /**
@@ -48,31 +84,8 @@ export async function runTranscriptionJob(jobId: string): Promise<void> {
     const job = await prisma.transcriptionJob.update({ where: { id: jobId }, data: { status: "processing" } });
     const projectId = job.projectId;
 
-    const originalAsset = await prisma.asset.findFirst({ where: { projectId, kind: "original" } });
-    if (!originalAsset) throw new Error("No source video for this project.");
-
-    const audioDir = path.posix.join("projects", projectId, "audio");
-    await mkdir(resolveInDataDir(audioDir), { recursive: true });
-
-    const audioRelativePath = path.posix.join(audioDir, "speech.mp3");
-    const audioPath = resolveInDataDir(audioRelativePath);
-    await runFfmpeg(buildExtractAudioArgs(resolveInDataDir(originalAsset.filePath), audioPath));
-
-    const audioStats = await statAsset(audioRelativePath);
-    await prisma.asset.deleteMany({ where: { projectId, kind: "audio" } });
-    await prisma.asset.create({
-      data: {
-        projectId,
-        kind: "audio",
-        filePath: audioRelativePath,
-        mimeType: "audio/mpeg",
-        sizeBytes: audioStats.size,
-      },
-    });
-
-    const duration = await probeDuration(audioPath);
-    const silences = parseSilenceDetectOutput(await runFfmpegCapturingStderr(buildSilenceDetectArgs(audioPath)));
-    const chunks = planChunks(duration, silences);
+    const { audioPath, audioDir, duration } = await extractSpeechAudio(projectId);
+    const chunks = await planSpeechChunks(audioPath, duration);
     await prisma.transcriptionJob.update({ where: { id: jobId }, data: { totalChunks: chunks.length } });
 
     const parts = await mapWithConcurrency(chunks, CHUNK_CONCURRENCY, async (chunk: AudioChunk) => {

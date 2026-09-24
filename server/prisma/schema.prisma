@@ -114,6 +114,8 @@ model TranscriptionJob {
   projectId String
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
+  /// "transcribe" (Whisper words) | "diarize" (speaker detection, see lib/ai/diarization-job.ts)
+  kind            String @default("transcribe")
   /// "queued" | "processing" | "completed" | "failed"
   status          String @default("queued")
   totalChunks     Int    @default(0)

@@ -9,6 +9,8 @@ import { useProjectStore } from "@/stores/project-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SpeakerLabel } from "@/components/transcript/SpeakerLabel";
+import { SpeakersBar } from "@/components/transcript/SpeakersBar";
+import { listSpeakers, speakerColor } from "@/lib/transcript/speakers";
 import { splitIntoSentences } from "@/lib/timeline/sentences";
 import { cutsOverlapping, isWordCut, isFullyCut, padCutStart, wordSpanBounds } from "@/lib/timeline/cuts";
 import { formatTimecode } from "@/lib/timeline/format";
@@ -45,10 +47,7 @@ export function TranscriptPanel() {
     [transcript]
   );
   const fillerWordIdSet = useMemo(() => new Set(fillerWordIds), [fillerWordIds]);
-  const existingSpeakers = useMemo(
-    () => Array.from(new Set(transcript?.segments.map((s) => s.speaker).filter((s): s is string => !!s))),
-    [transcript]
-  );
+  const existingSpeakers = useMemo(() => listSpeakers(transcript), [transcript]);
 
   if (!transcript) return null;
 
@@ -150,6 +149,7 @@ export function TranscriptPanel() {
           )}
         </div>
       </div>
+      <SpeakersBar />
       <datalist id="speaker-suggestions">
         {existingSpeakers.map((name) => (
           <option key={name} value={name} />
@@ -184,6 +184,7 @@ export function TranscriptPanel() {
                   {showSpeakerLabel ? (
                     <SpeakerLabel
                       speaker={segment.speaker}
+                      color={segment.speaker ? speakerColor(segment.speaker, existingSpeakers) : undefined}
                       onChange={(speaker) => handleSpeakerChange(segment.id, speaker)}
                     />
                   ) : (
