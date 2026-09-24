@@ -8,6 +8,8 @@ import { useEffect, useState } from "react";
  * if the source has no audio track — callers should treat that as "no
  * waveform to show" rather than an error.
  */
+const WAVEFORM_SAMPLE_RATE = 8000;
+
 export function useWaveform(videoUrl: string | null): AudioBuffer | null {
   const [buffer, setBuffer] = useState<AudioBuffer | null>(null);
 
@@ -20,9 +22,11 @@ export function useWaveform(videoUrl: string | null): AudioBuffer | null {
     // completion for no reason, doubling load on a video route that's
     // already juggling concurrent Range requests from the <video> element.
     const controller = new AbortController();
-    const AudioContextCtor =
-      window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    const ctx = new AudioContextCtor();
+    // Decode at a low sample rate: decodeAudioData resamples to the
+    // context's rate, and a waveform only needs peak amplitudes. At the
+    // default 48kHz a 2-hour episode decodes to ~1.4GB of float samples;
+    // at 8kHz it's ~230MB.
+    const ctx = new OfflineAudioContext(1, 1, WAVEFORM_SAMPLE_RATE);
 
     (async () => {
       try {
@@ -34,8 +38,6 @@ export function useWaveform(videoUrl: string | null): AudioBuffer | null {
         if (!controller.signal.aborted) setBuffer(decoded);
       } catch {
         // Aborted, no audio track, unsupported codec, or decode failure — just skip the waveform.
-      } finally {
-        ctx.close();
       }
     })();
 

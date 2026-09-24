@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db/client";
 import { writeAssetStream } from "@/lib/storage/local";
 import { errorResponse } from "@/lib/http";
 import { getMaxUploadBytes } from "@/lib/limits";
+import { generateProxy } from "@/lib/ffmpeg/proxy-job";
 
 export const uploadRoute = new Hono();
 
@@ -57,8 +58,8 @@ uploadRoute.post("/:id/upload", async (c) => {
   const { relativePath, sizeBytes } = await writeAssetStream(id, "original", filename, body);
 
   // Only one "original" asset per project for v1 -- replace any previous one,
-  // along with the audio track extracted from it.
-  await prisma.asset.deleteMany({ where: { projectId: id, kind: { in: ["original", "audio"] } } });
+  // along with the proxy/audio derived from it.
+  await prisma.asset.deleteMany({ where: { projectId: id, kind: { in: ["original", "proxy", "audio"] } } });
   const asset = await prisma.asset.create({
     data: {
       projectId: id,
@@ -68,6 +69,9 @@ uploadRoute.post("/:id/upload", async (c) => {
       sizeBytes,
     },
   });
+
+  // Background, best-effort: the editor plays the original until it's ready.
+  void generateProxy(id, asset.id);
 
   return c.json({ success: true, asset, videoUrl: `/api/projects/${id}/video` });
 });

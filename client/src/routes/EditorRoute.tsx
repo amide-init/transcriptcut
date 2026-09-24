@@ -28,6 +28,7 @@ type ProjectDetailResponse = {
   transcript: Transcript | null;
   operations: EditOperation[];
   videoUrl: string | null;
+  audioUrl: string | null;
   logoUrl: string | null;
 };
 
@@ -78,7 +79,7 @@ export function EditorRoute() {
     );
   }
 
-  const { project, transcript, operations, videoUrl, logoUrl } = state;
+  const { project, transcript, operations, videoUrl, audioUrl, logoUrl } = state;
 
   return (
     <EditorHydrator
@@ -94,6 +95,7 @@ export function EditorRoute() {
         logoPaddingY: project.logoPaddingY,
         logoOpacity: project.logoOpacity,
         videoUrl,
+        audioUrl,
         logoUrl,
       }}
       transcript={transcript}
