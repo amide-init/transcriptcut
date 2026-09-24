@@ -14,10 +14,28 @@ explicitly trigger — not an open-ended chat interface:
   already flagged as ambiguous candidates.
 - **Long-pause removal** — detects long silences and creates cut
   operations, again algorithmically (no LLM involved).
+- **Speaker detection** — labels who said what. The model only says who
+  spoke when; the words and their timings still come from the transcript.
+- **Chapters** and **show notes** — generated for the Publish tab, fully
+  editable afterwards.
+- **Find highlights** — picks standalone moments for Shorts.
 
-Both surface as explicit buttons in the transcript/timeline panels: run
-detection, review the flagged words, then remove them. Nothing is cut
-without you reviewing it first.
+All of these are explicit buttons. Filler words and pauses are flagged
+for you to review before anything is cut. Speakers, chapters, show notes
+and highlights never cut anything by themselves: you rename, edit, delete
+or render them yourself. See the [Podcast Workflow](/guide/podcasting)
+guide for where each one lives.
+
+## Models return picks, not timestamps
+
+For chapters and highlights, the model gets a numbered list of sentences
+and answers with sentence numbers and text, never with times. The app
+then takes the start and end from the sentences' own word timestamps and
+checks the rules (chapter spacing, clip length between 15 and 90 seconds,
+no overlaps) before saving anything. A chapter or clip can't start
+mid-word or point at a time that doesn't exist, however the model
+answers. Every response is schema-validated, and invalid output is
+discarded rather than applied.
 
 ## What was removed, and why
 
@@ -53,10 +71,12 @@ no impossible combinations) before any FFmpeg process runs.
 
 ## Model choice
 
-Transcription uses OpenAI Whisper (`whisper-1`) directly — it's not part
-of the editing-model routing below, since it's a distinct concern
-(speech-to-text vs. structured edit reasoning).
+| Task | Model | Why |
+| --- | --- | --- |
+| Transcription | `whisper-1` | Word-level timestamps, which transcript editing depends on |
+| Speaker detection | `gpt-4o-transcribe-diarize` | Speaker-labeled segments; Whisper still provides the words |
+| Filler words, chapters, show notes | `gpt-4o-mini` | Narrow classification and summarizing: a small, low-cost model is enough |
+| Find highlights | `gpt-5.6-luna` | Judging what works as a standalone clip across a whole episode needs a stronger reasoning model |
 
-For the ambiguous-word classification call, a small, low-cost model is
-used deliberately — this is a narrow classification task on a single
-word in context, not a task that benefits from a larger reasoning model.
+Each sits behind its own service module on the server, so a provider can
+be swapped without touching the rest of the app.

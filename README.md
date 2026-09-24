@@ -4,13 +4,17 @@
 
 ![transcriptcut editor: video preview, transcript with word-level cuts, and a frame-thumbnail timeline](docs/public/screenshots/hero.png)
 
-Edit video by editing its transcript, with a few explicit AI-assisted
-actions (filler-word and long-pause removal) layered on top — **not** a
-free-text "ask the AI to edit this" chat bar; an early version of that was
-built and worked, then deliberately removed (see Status below and
-`claude.md` section 3 for why). **Local-first and open source** — runs
-entirely on your machine, no cloud account required. See the
-[docs](https://amide-init.github.io/transcriptcut/) for more, and the
+Edit video by editing its transcript, built for **video podcasts**:
+long multi-speaker episodes in, podcast-ready audio, chapters, show notes,
+an MP3 for your feed and vertical Shorts out. AI helps through explicit,
+scoped buttons (filler words, speakers, chapters, show notes, highlights),
+**not** a free-text "ask the AI to edit this" chat bar; an early version
+of that was built and worked, then deliberately removed (see `claude.md`
+section 3 for why). **Local-first and open source** — runs entirely on
+your machine, no cloud account required. See the
+[docs](https://amide-init.github.io/transcriptcut/), especially the
+[Podcast Workflow](https://amide-init.github.io/transcriptcut/guide/podcasting)
+guide, and the
 [issue tracker](https://github.com/amide-init/transcriptcut/issues) for
 current build status.
 
@@ -37,8 +41,31 @@ Editing tools beyond manual transcript cuts:
 - **Captions** — font, size, color, position, and background-box styling,
   plus an optional word-by-word karaoke-style highlight.
 
-Export renders the final MP4 with every preview effect above (filters,
-properties, logo, captions) baked in — the CSS-preview ↔ ffmpeg-export
+For podcasts:
+
+- **Long episodes** — uploads up to 10 GB; transcription runs in the
+  background in ~10-minute chunks split at pauses, with progress; a 720p
+  editing proxy keeps big 4K originals smooth in the browser.
+- **Speakers** — "Detect speakers" labels who said what; rename a speaker
+  everywhere at once, or cut (and restore) everything one person said.
+- **Audio** — a one-click podcast preset: -16 / -14 LUFS loudness,
+  noise reduction, speaker leveling and a rumble filter, with a
+  15-second before/after preview.
+- **Publishing** — AI chapters (built into MP4/MP3 exports and copyable as
+  YouTube timestamps), editable show notes and title ideas, TXT/Markdown
+  transcripts, and MP3/WAV export.
+- **Clips / Shorts** — AI picks standalone 15-90s highlights, or clip a
+  transcript selection; render 9:16 / 1:1 / 16:9 with a positionable crop
+  and big word-by-word captions.
+
+AI models only ever return text and sentence picks, never timestamps or
+edits: times always come from the transcript's own word timestamps, and
+every response is validated before use. See the
+[AI guide](https://amide-init.github.io/transcriptcut/guide/ai-editing)
+for which model does what.
+
+Export renders the final MP4 (or MP3/WAV) with every preview effect above (filters,
+properties, logo, captions, audio cleanup) baked in — the CSS-preview ↔ ffmpeg-export
 math for each is unit-tested (see Testing below) to catch the preview and
 the actual export drifting apart, which happened in practice for several
 of these (see the issue tracker's closed bugs).
@@ -82,9 +109,10 @@ pnpm run dev
 
 ## Running the app
 
-Requires [FFmpeg](https://ffmpeg.org/download.html) and
+Requires [FFmpeg](https://ffmpeg.org/download.html) (with `ffprobe`) and
 [Bun](https://bun.sh) (the backend's runtime) on your machine, plus an
-OpenAI API key (used server-side only, for transcription).
+OpenAI API key (used server-side only, for transcription and the AI
+buttons).
 
 ### macOS quick start
 
@@ -117,6 +145,16 @@ Open [http://localhost:5173](http://localhost:5173). See
 [`server/.env.example`](./server/.env.example) for what each variable
 does, and [`CONTRIBUTING.md`](./CONTRIBUTING.md) for more.
 
+Two things to know during development:
+
+- **The dev server and the Mac app both use port 3001**, so quit one
+  before starting the other. If the app shows "404 Not Found", a dev
+  server is still running.
+- **`bun --watch` leaks a few file handles on every reload.** After a long
+  session with many server edits, FFmpeg can fail to start with
+  `EBADF: bad file descriptor, posix_spawn`. Restart `pnpm run dev` to
+  clear it.
+
 ### Download
 
 A native macOS app is also available (Apple Silicon only) — no need to
@@ -133,7 +171,9 @@ cd client
 pnpm exec tauri build
 ```
 
-Produces `client/src-tauri/target/release/bundle/{macos,dmg}/`. See
+Produces `client/src-tauri/target/release/bundle/{macos,dmg}/`. Installing
+a newer build over an older one keeps your projects: the server upgrades
+the app's database on launch. See
 `claude.md` section 35 for how it's wired together, and
 [`.github/workflows/build-macos-app.yml`](./.github/workflows/build-macos-app.yml)
 for how CI builds and releases it on a version tag push.
@@ -142,8 +182,11 @@ for how CI builds and releases it on a version tag push.
 
 Deterministic unit tests (Vitest) cover the core editing logic — timeline
 cut/trim math, transcript-to-caption mapping, the ffmpeg render-plan
-builder, path-traversal safety, and the CSS-preview/ffmpeg-export formula
-parity work described in the issue tracker:
+builder (cuts, audio cleanup, reframing, chapter metadata), chunked
+transcription and speaker alignment, chapter and highlight validation,
+database migrations, path-traversal safety, and the
+CSS-preview/ffmpeg-export formula parity work described in the issue
+tracker:
 
 ```bash
 pnpm run test   # runs both client and server test suites

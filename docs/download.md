@@ -55,10 +55,27 @@ You only need to do this once per download.
 ## First launch
 
 The app asks for your own OpenAI API key on first launch (used only for
-transcription and filler-word detection, stored only on your machine,
-never sent anywhere but OpenAI) — get one at
+transcription and the AI buttons — filler words, speakers, chapters,
+show notes, highlights — stored only on your machine, never sent anywhere
+but OpenAI) — get one at
 [platform.openai.com/api-keys](https://platform.openai.com/api-keys) if
 you don't already have one.
+
+## Updating
+
+Replace the app in Applications with the new version. Your projects are
+kept: they live in `~/Library/Application Support/com.local.aivideoeditor/`,
+not inside the app, and the new version upgrades that data automatically
+the first time it opens.
+
+## Troubleshooting
+
+- **The window shows "404 Not Found".** Something else is using port
+  3001, usually a `pnpm run dev` session from a source checkout. The app
+  runs its own server on that port, so quit the dev server and reopen the
+  app. The app and the dev server can't run at the same time.
+- **Anything else.** The app's server log is at
+  `~/Library/Logs/com.local.aivideoeditor/AI Video Editor.log`.
 
 ## Building it yourself
 
