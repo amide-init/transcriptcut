@@ -83,6 +83,8 @@ projectsRoute.get("/:id", async (c) => {
 
   const originalAsset = project.assets.find((a) => a.kind === "original") ?? null;
   const logoAsset = project.assets.find((a) => a.kind === "logo") ?? null;
+  const proxyAsset = project.assets.find((a) => a.kind === "proxy") ?? null;
+  const audioAsset = project.assets.find((a) => a.kind === "audio") ?? null;
 
   return c.json({
     success: true,
@@ -103,7 +105,10 @@ projectsRoute.get("/:id", async (c) => {
     },
     transcript,
     operations,
-    videoUrl: originalAsset ? `/api/projects/${project.id}/video` : null,
+    videoUrl: originalAsset
+      ? `/api/projects/${project.id}/video${proxyAsset ? "?variant=proxy" : ""}`
+      : null,
+    audioUrl: audioAsset ? `/api/projects/${project.id}/audio` : null,
     logoUrl: logoAsset ? `/api/projects/${project.id}/logo` : null,
   });
 });

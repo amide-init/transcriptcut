@@ -13,6 +13,8 @@ type ProjectStore = {
   id: string | null;
   name: string;
   videoUrl: string | null;
+  /** Small extracted speech track (server-side, during transcription) -- decoded for the waveform instead of the whole video. */
+  audioUrl: string | null;
   status: ProjectStatus;
   error: string | null;
   /** Id of the selected preview filter (see lib/video/filters.ts), "none" by default. */
@@ -56,6 +58,7 @@ type ProjectStore = {
     logoPaddingY: number;
     logoOpacity: number;
     videoUrl: string | null;
+    audioUrl: string | null;
     logoUrl: string | null;
   }) => void;
   reset: () => void;
@@ -65,6 +68,7 @@ const initialState = {
   id: null as string | null,
   name: "Untitled Project",
   videoUrl: null as string | null,
+  audioUrl: null as string | null,
   status: "empty" as ProjectStatus,
   error: null as string | null,
   filterId: "none",
@@ -189,6 +193,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       logoPaddingY: project.logoPaddingY,
       logoOpacity: project.logoOpacity,
       videoUrl: project.videoUrl,
+      audioUrl: project.audioUrl,
       logoUrl: project.logoUrl,
       status: "ready",
       error: null,

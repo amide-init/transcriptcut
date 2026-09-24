@@ -1,16 +1,16 @@
 import { Hono } from "hono";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/db/client";
-import { resolveInDataDir } from "@/lib/storage/local";
-import { transcribeFile } from "@/lib/ai/transcribe";
+import { runTranscriptionJob } from "@/lib/ai/transcription-job";
 import { errorResponse } from "@/lib/http";
 
 export const transcribeRoute = new Hono();
 
-const MAX_TRANSCRIBE_BYTES = 25 * 1024 * 1024; // Whisper API limit
-
+/**
+ * Starts a background transcription job and returns its id immediately (202);
+ * the client polls GET /:id/transcribe/:jobId for progress. The job extracts
+ * a small audio track and transcribes it in chunks (lib/ai/transcription-job.ts),
+ * so source size no longer runs into Whisper's 25MB upload cap.
+ */
 transcribeRoute.post("/:id/transcribe", async (c) => {
   const id = c.req.param("id");
 
@@ -18,32 +18,40 @@ transcribeRoute.post("/:id/transcribe", async (c) => {
   if (!asset) {
     return errorResponse(c, "NO_VIDEO", "Upload a video before transcribing.", 400);
   }
-  if (asset.sizeBytes > MAX_TRANSCRIBE_BYTES) {
-    return errorResponse(
-      c,
-      "FILE_TOO_LARGE",
-      `Video exceeds the ${MAX_TRANSCRIBE_BYTES / (1024 * 1024)}MB transcription limit.`,
-      413
-    );
+
+  const running = await prisma.transcriptionJob.findFirst({
+    where: { projectId: id, status: { in: ["queued", "processing"] } },
+  });
+  if (running) {
+    return errorResponse(c, "ALREADY_TRANSCRIBING", "This project is already being transcribed.", 409);
   }
 
-  try {
-    const bytes = await readFile(resolveInDataDir(asset.filePath));
-    const file = new File([new Uint8Array(bytes)], path.basename(asset.filePath), {
-      type: asset.mimeType,
-    });
+  const job = await prisma.transcriptionJob.create({ data: { projectId: id, status: "queued" } });
 
-    const transcript = await transcribeFile(file);
+  // Fire-and-forget, same as the render route: runTranscriptionJob catches
+  // every error itself and records it on the job row.
+  void runTranscriptionJob(job.id);
 
-    await prisma.transcript.upsert({
-      where: { projectId: id },
-      create: { projectId: id, segmentsJson: JSON.stringify(transcript.segments) },
-      update: { segmentsJson: JSON.stringify(transcript.segments) },
-    });
+  return c.json({ success: true, jobId: job.id }, 202);
+});
 
-    return c.json({ success: true, transcript });
-  } catch (err) {
-    logger.error("Transcription failed:", err);
-    return errorResponse(c, "TRANSCRIPTION_FAILED", "The video could not be transcribed. Please try again.", 502);
+transcribeRoute.get("/:id/transcribe/:jobId", async (c) => {
+  const id = c.req.param("id");
+  const jobId = c.req.param("jobId");
+
+  const job = await prisma.transcriptionJob.findUnique({ where: { id: jobId } });
+  if (!job || job.projectId !== id) {
+    return errorResponse(c, "NOT_FOUND", "Transcription job not found.", 404);
   }
+
+  return c.json({
+    success: true,
+    job: {
+      id: job.id,
+      status: job.status,
+      totalChunks: job.totalChunks,
+      completedChunks: job.completedChunks,
+      error: job.error,
+    },
+  });
 });

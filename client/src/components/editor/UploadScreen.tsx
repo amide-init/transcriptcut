@@ -18,10 +18,65 @@ async function postJson<T>(url: string, body: unknown): Promise<T | ApiError> {
   return res.json();
 }
 
+type TranscriptionJob = {
+  status: "queued" | "processing" | "completed" | "failed";
+  totalChunks: number;
+  completedChunks: number;
+  error: string | null;
+};
+
+const POLL_INTERVAL_MS = 1500;
+
+/**
+ * XHR rather than fetch: fetch has no upload-progress events, and a
+ * multi-GB podcast upload with no progress bar looks hung.
+ */
+function uploadWithProgress(
+  url: string,
+  file: File,
+  onProgress: (fraction: number) => void
+): Promise<{ success: true } | ApiError> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url);
+    xhr.setRequestHeader("Content-Type", file.type);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(e.loaded / e.total);
+    };
+    xhr.onload = () => {
+      try {
+        resolve(JSON.parse(xhr.responseText));
+      } catch {
+        reject(new Error("Invalid upload response"));
+      }
+    };
+    xhr.onerror = () => reject(new Error("Upload failed"));
+    xhr.send(file);
+  });
+}
+
+/** Polls a background transcription job until it finishes, reporting chunk progress along the way. */
+async function waitForTranscription(
+  projectId: string,
+  jobId: string,
+  onProgress: (job: TranscriptionJob) => void
+): Promise<TranscriptionJob> {
+  for (;;) {
+    const res = await fetch(`/api/projects/${projectId}/transcribe/${jobId}`);
+    const data: { success: true; job: TranscriptionJob } | ApiError = await res.json();
+    if (!data.success) throw new Error(data.error.message);
+    onProgress(data.job);
+    if (data.job.status === "completed" || data.job.status === "failed") return data.job;
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+  }
+}
+
 export function UploadScreen() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [nameDraft, setNameDraft] = useState("Untitled Project");
+  const [uploadFraction, setUploadFraction] = useState(0);
+  const [chunkProgress, setChunkProgress] = useState<{ done: number; total: number } | null>(null);
 
   const status = useProjectStore((s) => s.status);
   const error = useProjectStore((s) => s.error);
@@ -41,16 +96,13 @@ export function UploadScreen() {
     const projectId = created.project.id;
 
     setStatus("uploading");
+    setUploadFraction(0);
     try {
-      const uploadRes = await fetch(
+      const uploaded = await uploadWithProgress(
         `/api/projects/${projectId}/upload?filename=${encodeURIComponent(file.name)}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": file.type },
-          body: file,
-        }
+        file,
+        setUploadFraction
       );
-      const uploaded: { success: true } | ApiError = await uploadRes.json();
       if (!uploaded.success) {
         setErrorState(uploaded.error.message);
         return;
@@ -61,11 +113,21 @@ export function UploadScreen() {
     }
 
     setStatus("transcribing");
+    setChunkProgress(null);
     try {
-      const transcribeRes = await fetch(`/api/projects/${projectId}/transcribe`, { method: "POST" });
-      const transcribed: { success: true } | ApiError = await transcribeRes.json();
-      if (!transcribed.success) {
-        setErrorState(transcribed.error.message);
+      const started = await postJson<{ success: true; jobId: string }>(
+        `/api/projects/${projectId}/transcribe`,
+        {}
+      );
+      if (!started.success) {
+        setErrorState(started.error.message);
+        return;
+      }
+      const job = await waitForTranscription(projectId, started.jobId, (j) =>
+        setChunkProgress(j.totalChunks > 0 ? { done: j.completedChunks, total: j.totalChunks } : null)
+      );
+      if (job.status === "failed") {
+        setErrorState("The video could not be transcribed. Please try again.");
         return;
       }
     } catch {
@@ -82,9 +144,11 @@ export function UploadScreen() {
     status === "creating"
       ? "Creating project…"
       : status === "uploading"
-        ? "Uploading…"
+        ? `Uploading… ${Math.round(uploadFraction * 100)}%`
         : status === "transcribing"
-          ? "Transcribing…"
+          ? chunkProgress && chunkProgress.total > 1
+            ? `Transcribing… ${chunkProgress.done}/${chunkProgress.total}`
+            : "Transcribing…"
           : "Choose video";
 
   return (
@@ -140,7 +204,7 @@ export function UploadScreen() {
           <p className="text-sm text-destructive">{error}</p>
         ) : (
           <p className="font-mono text-xs text-muted-foreground">
-            mp4, mov, webm, m4a — up to 25MB for now
+            mp4, mov, webm — long episodes welcome; transcription runs in chunks
           </p>
         )}
       </div>
