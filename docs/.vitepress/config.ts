@@ -6,7 +6,7 @@ import { defineConfig } from "vitepress";
 export default defineConfig({
   title: "transcriptcut",
   description:
-    "Edit video by editing its transcript. Local-first, open source, no cloud account required.",
+    "Edit video podcasts by editing the transcript: clean audio, speakers, chapters, show notes and Shorts. Local-first, open source, no cloud account required.",
   base: "/transcriptcut/",
   lastUpdated: true,
   cleanUrls: true,
@@ -36,6 +36,7 @@ export default defineConfig({
             { text: "Getting Started", link: "/guide/getting-started" },
             { text: "Architecture", link: "/guide/architecture" },
             { text: "Editing Workflow", link: "/guide/editing-workflow" },
+            { text: "Podcast Workflow", link: "/guide/podcasting" },
             { text: "AI-Assisted Editing", link: "/guide/ai-editing" },
             { text: "Security & Self-Hosting", link: "/guide/security" },
           ],
