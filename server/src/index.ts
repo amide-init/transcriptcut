@@ -20,6 +20,7 @@ import { speakersRoute } from "@/routes/speakers";
 import { clipsRoute } from "@/routes/clips";
 import { prisma } from "@/lib/db/client";
 import { getMaxUploadBytes } from "@/lib/limits";
+import { applyPendingMigrations } from "@/lib/db/migrate";
 
 const app = new Hono();
 
@@ -57,6 +58,10 @@ if (existsSync(clientDistDir)) {
   // lookup (confirmed empirically) if `root` is left at its "./" default.
   app.get("*", serveStatic({ root: clientDistDir, path: "index.html" }));
 }
+
+// Bring an existing database (e.g. a packaged-app install from an older
+// version) up to the current schema before anything queries it.
+await applyPendingMigrations();
 
 // Jobs run in-process, so any still "queued"/"processing" at startup were
 // interrupted by a restart and will never finish -- mark them failed so the
