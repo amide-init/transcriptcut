@@ -4,8 +4,17 @@ import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/db/client";
 import { resolveInDataDir, statAsset } from "@/lib/storage/local";
 import { computePlayableRanges } from "@/lib/timeline/cuts";
-import { buildRenderArgs } from "@/lib/ffmpeg/plan";
-import { runFfmpeg } from "@/lib/ffmpeg/run";
+import { buildLoudnessAnalysisArgs, buildRenderArgs } from "@/lib/ffmpeg/plan";
+import {
+  buildAudioFilterChain,
+  buildLoudnessAnalysisChain,
+  clampGainDb,
+  gainToTarget,
+  loudnessTargetLufs,
+  parseMeasuredLoudness,
+} from "@/lib/ffmpeg/audio-filters";
+import { parseStoredAudioSettings } from "@/lib/validation/audio-settings";
+import { runFfmpeg, runFfmpegCapturingStderr } from "@/lib/ffmpeg/run";
 import { probeVideoDimensions } from "@/lib/ffmpeg/probe";
 import { generateCaptions } from "@/lib/captions/generate";
 import { toAssKaraoke, toSrt } from "@/lib/captions/format";
@@ -14,6 +23,79 @@ import { DEFAULT_VIDEO_PROPERTIES } from "@/types/video-properties";
 import { toLogoPosition } from "@/lib/video/logo";
 import type { CutOperation, EditOperation } from "@/types/edit-operation";
 import type { Transcript } from "@/types/transcript";
+import type { PlayableRange } from "@/types/timeline";
+import type { AudioSettings } from "@/types/audio-settings";
+
+/** Close enough to the loudness target to stop correcting (in LU). */
+const LOUDNESS_TOLERANCE_LU = 0.3;
+const MAX_LOUDNESS_CORRECTIONS = 3;
+/**
+ * How far correction steps may push past the first (unlimited) gain
+ * estimate. Past this the limiter is squashing so hard that, after AAC
+ * encoding, peaks overshoot the ceiling -- measured: +8.5dB of extra gain on
+ * a very quiet, noisy source clipped at +0.7 dBTP. Missing the loudness
+ * target by a little is far better than clipping.
+ */
+const MAX_CORRECTION_ABOVE_ESTIMATE_DB = 6;
+
+/**
+ * Finds the gain that puts the edited, cleaned-up audio on its loudness
+ * target. Measures the audio, applies target-minus-measured through the
+ * real gain + limiter chain, then corrects with secant steps: once the
+ * limiter is working hard, each extra dB of gain buys less than a dB of
+ * loudness, so the step uses the gain-to-loudness slope observed between
+ * the last two passes instead of assuming 1:1 (plain top-ups measured
+ * -14.5 LUFS after three passes on a -14 target; secant steps converge).
+ * Each pass decodes audio only, so it's quick next to the video encode.
+ *
+ * Undefined when no target is set, or when measuring fails or finds only
+ * silence -- the render then uses single-pass loudnorm, which still lands
+ * close.
+ */
+export async function resolveLoudnessGain(
+  inputPath: string,
+  playableRanges: PlayableRange[],
+  audioSettings: AudioSettings,
+  jobId: string
+): Promise<number | undefined> {
+  const target = loudnessTargetLufs(audioSettings);
+  if (target === null) return undefined;
+
+  const measure = async (gainDb?: number) => {
+    const analysisChain = buildLoudnessAnalysisChain(audioSettings, gainDb)!;
+    const stderr = await runFfmpegCapturingStderr(
+      buildLoudnessAnalysisArgs({ inputPath, playableRanges, analysisChain })
+    );
+    return parseMeasuredLoudness(stderr);
+  };
+
+  try {
+    const initial = await measure();
+    if (initial === null) {
+      logger.warn(`Render ${jobId}: no usable loudness measurement; using single-pass loudnorm.`);
+      return undefined;
+    }
+    // Each point is (gain applied, loudness measured). At gain 0 the limiter
+    // barely engages, so the unprocessed measurement serves as the first.
+    let previous = { gain: 0, lufs: initial };
+    const estimate = gainToTarget(target, initial);
+    const ceiling = estimate + MAX_CORRECTION_ABOVE_ESTIMATE_DB;
+    let gain = estimate;
+    for (let i = 0; i < MAX_LOUDNESS_CORRECTIONS; i++) {
+      const lufs = await measure(gain);
+      if (lufs === null || Math.abs(target - lufs) <= LOUDNESS_TOLERANCE_LU) break;
+      const observedSlope = (lufs - previous.lufs) / (gain - previous.gain);
+      // Clamp: noise in a short measurement must not send the next step wild.
+      const slope = Number.isFinite(observedSlope) ? Math.min(1, Math.max(0.25, observedSlope)) : 1;
+      previous = { gain, lufs };
+      gain = Math.min(ceiling, clampGainDb(gain + (target - lufs) / slope));
+    }
+    return gain;
+  } catch (err) {
+    logger.warn(`Render ${jobId}: loudness measurement failed; using single-pass loudnorm.`, err);
+    return undefined;
+  }
+}
 
 /**
  * Runs one render job to completion and updates its RenderJob row along the
@@ -81,6 +163,12 @@ export async function runRenderJob(
       await writeFile(subtitlesPath, contents, "utf-8");
     }
 
+    const audioSettings = parseStoredAudioSettings(project.audioSettingsJson);
+    const audioFilter = buildAudioFilterChain(
+      audioSettings,
+      await resolveLoudnessGain(inputPath, playableRanges, audioSettings, jobId)
+    );
+
     const args = buildRenderArgs({
       inputPath,
       outputPath,
@@ -96,6 +184,7 @@ export async function runRenderJob(
       logoOpacity: logoAsset ? project.logoOpacity : undefined,
       videoWidth: videoDimensions?.width,
       videoHeight: videoDimensions?.height,
+      audioFilter,
     });
     await runFfmpeg(args);
 
