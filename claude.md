@@ -217,7 +217,12 @@ Do not use GPT-5.6 Luna for every request.
 Transcription is a separate concern from editing and isn't routed through
 the GPT-4o-mini / GPT-5.6 Luna split above. Use OpenAI Whisper
 (`whisper-1`, `verbose_json`, word + segment timestamp granularity) —
-already implemented in `lib/ai/transcribe.ts`. Keep it behind a clear
+already implemented in `lib/ai/transcribe.ts`. Long episodes are handled
+by `lib/ai/transcription-job.ts`: it extracts a mono 16kHz 32kbps speech
+track, splits it into ~10-minute chunks at detected silences
+(`lib/ai/chunking.ts`), transcribes the chunks in parallel, and merges them
+back onto the source timeline, so source file size never hits Whisper's
+25MB upload cap. Keep it behind a clear
 service interface (per section 29) so the provider can be swapped later.
 
 ---
@@ -714,6 +719,8 @@ Transcript     — belongs to Project
 EditOperation  — belongs to Project
 
 RenderJob      — belongs to Project
+
+TranscriptionJob — belongs to Project (background chunked transcription status/progress)
 ```
 
 No `User` model, no ownership checks for v1 (see section 2) — every
@@ -810,7 +817,11 @@ GET    /api/projects
 GET    /api/projects/:id
 
 POST   /api/projects/:id/upload
-POST   /api/projects/:id/transcribe
+POST   /api/projects/:id/transcribe          (202 + jobId; runs in the background)
+GET    /api/projects/:id/transcribe/:jobId   (status + chunk progress)
+
+GET    /api/projects/:id/video[?variant=proxy]
+GET    /api/projects/:id/audio               (extracted speech track, for the waveform)
 
 GET    /api/projects/:id/transcript
 
