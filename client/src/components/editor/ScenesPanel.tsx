@@ -11,6 +11,7 @@ import { formatTimecode } from "@/lib/timeline/format";
 import { Button } from "@/components/ui/button";
 import { CardEditor } from "@/components/editor/CardEditor";
 import { TransitionPicker } from "@/components/editor/TransitionPicker";
+import { SceneSuggestions } from "@/components/editor/SceneSuggestions";
 import { CARD_BACKGROUNDS } from "@/lib/cards/layout";
 import type { CardOperation, CardTemplate, CutOperation, TransitionOperation } from "@/types/edit-operation";
 
@@ -125,6 +126,8 @@ export function ScenesPanel() {
           inside one.
         </p>
       </div>
+
+      <SceneSuggestions />
 
       {scenes.length <= 1 && (
         <p className="rounded-lg border border-dashed border-border p-3 text-muted-foreground">

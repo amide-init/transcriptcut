@@ -153,12 +153,15 @@ model TranscriptionJob {
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   /// "transcribe" (Whisper words) | "diarize" (speaker detection, see lib/ai/diarization-job.ts)
+  /// | "shots" (shot-change detection, see lib/ffmpeg/shots.ts)
   kind            String @default("transcribe")
   /// "queued" | "processing" | "completed" | "failed"
   status          String @default("queued")
   totalChunks     Int    @default(0)
   completedChunks Int    @default(0)
   error           String?
+  /// "shots" jobs: the detected shot-change times (source seconds), as a JSON array.
+  resultJson      String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
