@@ -674,6 +674,16 @@ length (`plan.ts#layoutProgram`). The preview draws them with
 `TransitionOverlay` from the pure `transition-look.ts`, on its own
 animation-frame loop; audio fades aren't previewed.
 
+**B-roll**: `media` assets (many per project, stored under a unique
+prefix, with name/size/length columns) placed by `overlay` operations:
+an asset shown from `start` to `end` in source time (so it follows cuts),
+full screen (scaled to fill, cropped) or picture-in-picture (32% wide,
+4% inset, a chosen corner). Placed on program time like captions
+(`program.ts#placeOverlays`), composited as extra ffmpeg inputs after the
+join and grade, before any clip reframe, card text, captions and logo --
+an image looped for its slot, a video trimmed from its offset holding its
+last frame. B-roll audio is never used. It plays in clips too.
+
 **ffmpeg 9 xfade gotchas** (`plan.ts`, measured on 9.0.2): every segment
 must be pinned to the source's frame rate with `fps=` (without it xfade
 drops the start of each later segment), must not get a `settb` after
@@ -948,6 +958,10 @@ GET    /api/projects/:id/clips
 POST   /api/projects/:id/clips/highlights        (GPT-5.6 Luna picks; replaces earlier AI picks)
 POST   /api/projects/:id/clips                   PATCH/DELETE /api/projects/:id/clips/:clipId
 (render a clip: POST /api/projects/:id/render with {clipId})
+
+GET    /api/projects/:id/media                    (media library: images and clips for B-roll)
+POST   /api/projects/:id/media?filename=          (raw body, image/png|jpeg|webp or video/*; probed, refused if unreadable)
+GET    /api/projects/:id/media/:assetId/file      DELETE /api/projects/:id/media/:assetId (409 while B-roll uses it)
 ```
 
 (No `POST /api/projects/:id/ai/edit` — the free-text AI command bar this
