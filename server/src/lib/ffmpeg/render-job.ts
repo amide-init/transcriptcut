@@ -22,7 +22,7 @@ import {
 } from "@/lib/ffmpeg/audio-filters";
 import { parseStoredAudioSettings } from "@/lib/validation/audio-settings";
 import { runFfmpeg, runFfmpegCapturingStderr } from "@/lib/ffmpeg/run";
-import type { RenderProgram } from "@/lib/ffmpeg/plan";
+import type { RenderOverlay, RenderProgram } from "@/lib/ffmpeg/plan";
 import { probeVideoStream } from "@/lib/ffmpeg/probe";
 import {
   buildProgram,
@@ -30,6 +30,7 @@ import {
   cardsDuration,
   editedRangeToProgram,
   isPlainProgram,
+  placeOverlays,
   type CardSlot,
 } from "@/lib/timeline/program";
 import { toCardsAss } from "@/lib/cards/ass";
@@ -233,6 +234,24 @@ export async function runRenderJob(
 
     // Title cards are generated at the source's own size so they join it seamlessly.
     let cardFrame: { width: number; height: number; textPath: string } | undefined;
+    // B-roll plays in clips too (it's part of the edit inside the clip's range).
+    const placedOverlays = built?.overlays ?? placeOverlays(operations, playableRanges, []);
+    const brollOverlays: RenderOverlay[] = placedOverlays.flatMap(({ overlay, start, end }) => {
+      const asset = project.assets.find((a) => a.id === overlay.assetId && a.kind === "media");
+      if (!asset) return [];
+      return [
+        {
+          path: resolveInDataDir(asset.filePath),
+          image: asset.mimeType.startsWith("image/"),
+          start,
+          end,
+          offset: overlay.offset ?? 0,
+          mode: overlay.mode,
+          corner: overlay.corner ?? "bottom-right",
+        },
+      ];
+    });
+
     if (program && cardSlots.length > 0 && sourceStream) {
       const textPath = resolveInDataDir(path.posix.join("projects", project.id, "render", `${jobId}.cards.ass`));
       await writeFile(textPath, toCardsAss(cardStartTimes(program.items), sourceStream), "utf-8");
@@ -309,6 +328,10 @@ export async function runRenderJob(
           frameRate: sourceStream!.fps,
           program,
           cardFrame,
+          broll:
+            sourceStream && brollOverlays.length > 0
+              ? { frame: { width: sourceStream.width, height: sourceStream.height }, overlays: brollOverlays }
+              : undefined,
         })
       : buildAudioOnlyRenderArgs({ inputPath, outputPath, playableRanges, program, audioFilter, format, metadataPath });
     await runFfmpeg(args);

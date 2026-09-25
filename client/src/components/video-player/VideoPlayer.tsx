@@ -13,6 +13,7 @@ import { programPlayhead, useProgram } from "@/lib/timeline/useProgram";
 import { useCardPlayback } from "@/components/video-player/useCardPlayback";
 import { CardPreview } from "@/components/video-player/CardPreview";
 import { TransitionOverlay } from "@/components/video-player/TransitionOverlay";
+import { BrollLayer } from "@/components/video-player/BrollLayer";
 import { generateCaptions } from "@/lib/captions/generate";
 import { formatTimecode } from "@/lib/timeline/format";
 import { getFilterPreset } from "@/lib/video/filters";
@@ -316,7 +317,8 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
           data-playing={isPlaying}
         />
         <CropOverlay />
-        {/* Under the logo, like the export: the watermark stays on top of cards and transitions. */}
+        {/* B-roll, cards and transitions sit under the logo and captions, like the export. */}
+        <BrollLayer videoRef={videoRef} program={program} />
         {activeCard && <CardPreview card={activeCard} elapsed={card?.elapsed} />}
         <TransitionOverlay videoRef={videoRef} program={program} />
         {cardDraft && <CardPreview card={cardDraft} />}

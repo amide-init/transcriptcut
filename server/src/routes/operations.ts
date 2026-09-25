@@ -21,7 +21,7 @@ operationsRoute.post("/:id/operations", async (c) => {
   }
 
   const op = parsed.data;
-  if ((op.type === "cut" || op.type === "trim") && op.end <= op.start) {
+  if ((op.type === "cut" || op.type === "trim" || op.type === "overlay") && op.end <= op.start) {
     return errorResponse(c, "INVALID_OPERATION", "end must be after start.", 400);
   }
 
@@ -39,6 +39,15 @@ operationsRoute.post("/:id/operations", async (c) => {
   }
   if (op.type === "transition" && project.duration && op.at > project.duration) {
     return errorResponse(c, "INVALID_OPERATION", "Transition must be placed inside the video.", 400);
+  }
+  if (op.type === "overlay") {
+    if (project.duration && op.end > project.duration + 0.01) {
+      return errorResponse(c, "INVALID_OPERATION", "B-roll must end inside the video.", 400);
+    }
+    const asset = await prisma.asset.findFirst({ where: { id: op.assetId, projectId, kind: "media" } });
+    if (!asset) {
+      return errorResponse(c, "INVALID_OPERATION", "That media file isn't in this project's library.", 400);
+    }
   }
 
   // Client generates the id (needed so undo/redo can address the exact row);

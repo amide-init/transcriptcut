@@ -69,7 +69,7 @@ describe("storage/local (real fs, temp DATA_DIR)", () => {
   it("ensureProjectDirs creates every asset-kind subdirectory", async () => {
     await ensureProjectDirs("project1");
     const kinds = await readdir(path.join(getDataDir(), "projects", "project1"));
-    expect(kinds.sort()).toEqual(["audio", "logo", "original", "proxy", "render", "thumbnail"]);
+    expect(kinds.sort()).toEqual(["audio", "logo", "media", "original", "proxy", "render", "thumbnail"]);
   });
 
   it("deleteProjectDir removes the whole project directory", async () => {

@@ -97,12 +97,19 @@ model Asset {
   projectId String
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  /// "original" | "proxy" | "audio" | "thumbnail" | "render"
+  /// "original" | "proxy" | "audio" | "thumbnail" | "render" | "logo" | "media"
   kind String
   /// Path relative to DATA_DIR, e.g. "projects/{id}/original/video.mp4"
   filePath String
   mimeType String
   sizeBytes Int
+
+  /// Media library (B-roll) only: the uploaded file's name, pixel size, and
+  /// length in seconds for video.
+  name     String?
+  width    Int?
+  height   Int?
+  duration Float?
 
   createdAt DateTime @default(now())
 

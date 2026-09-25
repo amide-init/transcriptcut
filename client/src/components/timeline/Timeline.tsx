@@ -314,6 +314,22 @@ export function Timeline() {
               style={{ left: `${playheadPosition}%` }}
             />
           </div>
+          {program.overlays.length > 0 && totalDuration > 0 && (
+            <div className="relative h-4 w-full rounded-sm bg-muted/60" aria-label="B-roll">
+              {program.overlays.map(({ overlay, start, end }) => (
+                <button
+                  key={overlay.id}
+                  type="button"
+                  onClick={() => seek(overlay.start)}
+                  title={`B-roll, ${overlay.mode === "full" ? "full screen" : "picture in picture"} (${formatTimecode(end - start)})`}
+                  className={`absolute top-0.5 h-3 rounded-sm border hover:brightness-125 ${
+                    overlay.mode === "full" ? "border-sky-400 bg-sky-500/60" : "border-sky-400 bg-sky-500/25"
+                  }`}
+                  style={{ left: `${(start / totalDuration) * 100}%`, width: `${((end - start) / totalDuration) * 100}%` }}
+                />
+              ))}
+            </div>
+          )}
           {audioBuffer && totalDuration > 0 && (
             <div className="flex h-12 w-full overflow-hidden rounded-md border border-border bg-muted p-1.5">
               {program.items.map((item, i) => (

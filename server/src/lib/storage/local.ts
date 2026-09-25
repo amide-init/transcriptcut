@@ -38,7 +38,7 @@ function assertSafeProjectId(projectId: string): void {
   }
 }
 
-export type AssetKind = "original" | "proxy" | "audio" | "thumbnail" | "render" | "logo";
+export type AssetKind = "original" | "proxy" | "audio" | "thumbnail" | "render" | "logo" | "media";
 
 function projectRelativeDir(projectId: string, kind: AssetKind): string {
   assertSafeProjectId(projectId);
@@ -46,13 +46,13 @@ function projectRelativeDir(projectId: string, kind: AssetKind): string {
 }
 
 /** Strip any path components / unsafe characters from a client-supplied filename. */
-function sanitizeFilename(filename: string): string {
+export function sanitizeFilename(filename: string): string {
   const base = path.basename(filename).replace(/[^a-zA-Z0-9._-]/g, "_");
   return base.length > 0 ? base : "file";
 }
 
 export async function ensureProjectDirs(projectId: string): Promise<void> {
-  const kinds: AssetKind[] = ["original", "proxy", "audio", "thumbnail", "render", "logo"];
+  const kinds: AssetKind[] = ["original", "proxy", "audio", "thumbnail", "render", "logo", "media"];
   await Promise.all(
     kinds.map((kind) => mkdir(resolveInDataDir(projectRelativeDir(projectId, kind)), { recursive: true }))
   );

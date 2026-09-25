@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AudioLines, BookOpenText, Captions, ChevronLeft, Clapperboard, ChevronRight, Film, ImagePlus, SlidersHorizontal, Sliders, Wand2 } from "lucide-react";
+import { AudioLines, BookOpenText, Captions, ChevronLeft, Clapperboard, ChevronRight, Film, Images, ImagePlus, SlidersHorizontal, Sliders, Wand2 } from "lucide-react";
 import { AiToolsPanel } from "@/components/editor/AiToolsPanel";
 import { FiltersPanel } from "@/components/editor/FiltersPanel";
 import { PropertiesPanel } from "@/components/editor/PropertiesPanel";
@@ -11,12 +11,14 @@ import { AudioPanel } from "@/components/editor/AudioPanel";
 import { PublishPanel } from "@/components/editor/PublishPanel";
 import { ClipsPanel } from "@/components/editor/ClipsPanel";
 import { ScenesPanel } from "@/components/editor/ScenesPanel";
+import { MediaPanel } from "@/components/editor/MediaPanel";
 
-type PanelId = "captions" | "scenes" | "audio" | "publish" | "clips" | "ai" | "filters" | "properties" | "elements";
+type PanelId = "captions" | "scenes" | "media" | "audio" | "publish" | "clips" | "ai" | "filters" | "properties" | "elements";
 
 const TABS: { id: PanelId; label: string; icon: typeof Wand2 }[] = [
   { id: "captions", label: "Captions", icon: Captions },
   { id: "scenes", label: "Scenes", icon: Film },
+  { id: "media", label: "Media", icon: Images },
   { id: "audio", label: "Audio", icon: AudioLines },
   { id: "publish", label: "Publish", icon: BookOpenText },
   { id: "clips", label: "Clips", icon: Clapperboard },
@@ -112,6 +114,7 @@ export function EditorSidebar() {
       <div className="flex-1 overflow-y-auto p-3">
         {activePanel === "captions" && <CaptionsPanel />}
         {activePanel === "scenes" && <ScenesPanel />}
+        {activePanel === "media" && <MediaPanel />}
         {activePanel === "audio" && <AudioPanel />}
         {activePanel === "publish" && <PublishPanel />}
         {activePanel === "clips" && <ClipsPanel />}

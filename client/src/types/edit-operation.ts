@@ -66,6 +66,23 @@ export type EditOperation =
       duration: number;
     })
   | (OperationBase & {
+      /**
+       * B-roll: an image or video from the project's media library shown
+       * over the footage from `start` to `end` (source time, so it follows
+       * cuts), full screen or picture-in-picture. The footage's audio keeps
+       * playing; the B-roll's own audio is not used.
+       */
+      type: "overlay";
+      assetId: string;
+      start: number;
+      end: number;
+      mode: OverlayMode;
+      /** Picture-in-picture only. */
+      corner?: OverlayCorner;
+      /** Seconds into a video asset to start from. */
+      offset?: number;
+    })
+  | (OperationBase & {
       type: "caption";
       text: string;
       start: number;
@@ -89,7 +106,13 @@ export type TransitionKind = (typeof TRANSITION_KINDS)[number];
 export const TRANSITION_MIN_SECONDS = 0.2;
 export const TRANSITION_MAX_SECONDS = 2;
 
+export const OVERLAY_MODES = ["full", "pip"] as const;
+export type OverlayMode = (typeof OVERLAY_MODES)[number];
+export const OVERLAY_CORNERS = ["top-left", "top-right", "bottom-left", "bottom-right"] as const;
+export type OverlayCorner = (typeof OVERLAY_CORNERS)[number];
+
 export type CutOperation = Extract<EditOperation, { type: "cut" }>;
 export type SplitOperation = Extract<EditOperation, { type: "split" }>;
 export type CardOperation = Extract<EditOperation, { type: "card" }>;
 export type TransitionOperation = Extract<EditOperation, { type: "transition" }>;
+export type OverlayOperation = Extract<EditOperation, { type: "overlay" }>;
