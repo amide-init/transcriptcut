@@ -8,9 +8,14 @@ const baseArgs = {
   outputPath: "/data/out.mp4",
   playableRanges: [{ start: 0, end: 10 }],
   filterId: "none",
+  frameRate: "30000/1001",
 };
 
 describe("buildRenderArgs: validation", () => {
+  it("rejects a frame rate that isn't a plain number or ratio", () => {
+    expect(() => buildRenderArgs({ ...baseArgs, frameRate: "30,drawtext=x" })).toThrow(/Invalid frame rate/);
+  });
+
   it("throws when the entire video has been cut (no playable ranges)", () => {
     expect(() => buildRenderArgs({ ...baseArgs, playableRanges: [] })).toThrow(/entire video has been cut/);
   });
@@ -52,7 +57,7 @@ describe("buildRenderArgs: basic structure", () => {
   it("trims a single range and maps it straight to [outv]/[outa]", () => {
     const argv = buildRenderArgs(baseArgs);
     const filterComplex = argv[argv.indexOf("-filter_complex") + 1];
-    expect(filterComplex).toContain("[0:v]trim=start=0.000:end=10.000,setpts=PTS-STARTPTS[v0]");
+    expect(filterComplex).toContain("[0:v]trim=start=0.000:end=10.000,setpts=PTS-STARTPTS,fps=30000/1001[v0]");
     expect(filterComplex).toContain("[0:a]atrim=start=0.000:end=10.000,asetpts=PTS-STARTPTS[a0]");
     expect(filterComplex).toContain("[v0]null[outv]");
     expect(filterComplex).toContain("[a0]anull[outa]");
@@ -67,8 +72,8 @@ describe("buildRenderArgs: basic structure", () => {
       ],
     });
     const filterComplex = argv[argv.indexOf("-filter_complex") + 1];
-    expect(filterComplex).toContain("[0:v]trim=start=0.000:end=3.000,setpts=PTS-STARTPTS[v0]");
-    expect(filterComplex).toContain("[0:v]trim=start=5.000:end=8.000,setpts=PTS-STARTPTS[v1]");
+    expect(filterComplex).toContain("[0:v]trim=start=0.000:end=3.000,setpts=PTS-STARTPTS,fps=30000/1001[v0]");
+    expect(filterComplex).toContain("[0:v]trim=start=5.000:end=8.000,setpts=PTS-STARTPTS,fps=30000/1001[v1]");
     // Both 3s segments comfortably fit the default 0.03s crossfade: offset
     // is the first segment's own length (3.0) minus that 0.03s.
     expect(filterComplex).toContain("[v0][v1]xfade=transition=fade:duration=0.030:offset=2.970[outv]");
