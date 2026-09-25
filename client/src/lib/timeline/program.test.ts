@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildProgram,
   buildProgramItems,
+  isPlainProgram,
   cardStartTimes,
   cardsDuration,
   editedRangeToProgram,
@@ -22,6 +24,12 @@ const card = (id: string, at: number, duration = 3, createdAt = 0): CardOperatio
   createdAt,
 });
 const cut = (start: number, end: number): CutOperation => ({ id: `cut-${start}`, type: "cut", start, end, createdAt: 0 });
+const transition = (
+  at: number,
+  kind: "dipBlack" | "dipWhite" | "crossfade",
+  duration = 1,
+  createdAt = 0
+): EditOperation => ({ id: `t-${at}-${createdAt}`, type: "transition", at, kind, duration, createdAt });
 const split = (timestamp: number): EditOperation => ({ id: `split-${timestamp}`, type: "split", timestamp, createdAt: 0 });
 
 function program(ops: EditOperation[], duration = 100) {
@@ -123,5 +131,64 @@ describe("editedRangeToProgram and cardStartTimes", () => {
       ["intro", 0],
       ["mid", 42],
     ]);
+  });
+});
+
+describe("transitions", () => {
+  const build = (ops: EditOperation[], duration = 100) => {
+    const ranges = computePlayableRanges(
+      duration,
+      ops.filter((op): op is CutOperation => op.type === "cut")
+    );
+    return buildProgram(ops, ranges, duration);
+  };
+
+  it("leaves a project without cards or transitions plain", () => {
+    expect(isPlainProgram(build([cut(10, 20), split(50)]))).toBe(true);
+  });
+
+  it("splits footage at a mid-range transition so it has a join to live on", () => {
+    const p = build([split(40), transition(40, "dipBlack")]);
+    expect(p.items).toEqual([
+      { kind: "source", start: 0, end: 40 },
+      { kind: "source", start: 40, end: 100 },
+    ]);
+    expect(p.joins).toEqual([{ kind: "dip", color: "black", seconds: 1 }]);
+  });
+
+  it("styles both joins around a card at the transition's moment", () => {
+    const p = build([split(40), card("mid", 40), transition(40, "crossfade", 0.8)]);
+    expect(p.items.map((i) => i.kind)).toEqual(["source", "card", "source"]);
+    expect(p.joins).toEqual([
+      { kind: "crossfade", seconds: 0.8 },
+      { kind: "crossfade", seconds: 0.8 },
+    ]);
+  });
+
+  it("falls back to a cut for a crossfade between two stretches of footage", () => {
+    expect(build([split(40), transition(40, "crossfade")]).joins).toEqual([{ kind: "cut" }]);
+  });
+
+  it("turns transitions at the ends into fades in and out", () => {
+    const p = build([transition(0, "dipBlack", 1.5), transition(100, "dipWhite", 2)]);
+    expect(p.fadeIn).toEqual({ color: "black", seconds: 1.5 });
+    expect(p.fadeOut).toEqual({ color: "white", seconds: 2 });
+    expect(isPlainProgram(p)).toBe(false);
+  });
+
+  it("keeps only the latest transition at a moment, and drops one whose scene is cut", () => {
+    const latest = build([split(40), transition(40, "dipBlack", 1, 1), transition(40, "dipWhite", 1, 2)]);
+    expect(latest.joins).toEqual([{ kind: "dip", color: "white", seconds: 1 }]);
+    const gone = build([split(40), split(60), cut(40, 60), transition(40, "dipBlack")]);
+    expect(gone.joins.every((j) => j.kind === "cut")).toBe(true);
+  });
+
+  it("applies at the next kept content when the transition's moment was cut", () => {
+    const p = build([split(40), cut(35, 45), transition(40, "dipBlack")]);
+    expect(p.items).toEqual([
+      { kind: "source", start: 0, end: 35 },
+      { kind: "source", start: 45, end: 100 },
+    ]);
+    expect(p.joins[0]).toMatchObject({ kind: "dip" });
   });
 });
