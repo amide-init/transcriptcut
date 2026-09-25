@@ -26,14 +26,14 @@ export class PublishingAiError extends Error {
 }
 
 /** Numbered, timestamped lines, so the model can point at sentences by index. */
-function numberedTranscript(sentences: EditedSentence[]): string {
+export function numberedTranscript(sentences: EditedSentence[]): string {
   const longForm = sentences.length > 0 && sentences[sentences.length - 1].end >= 3600;
   return sentences
     .map((s, i) => `[${i}] ${formatTimestamp(s.start, longForm)} ${s.speaker ? `${s.speaker}: ` : ""}${s.text}`)
     .join("\n");
 }
 
-async function completeJson(system: string, user: string): Promise<unknown> {
+export async function completeJson(system: string, user: string): Promise<unknown> {
   const completion = await getOpenAI().chat.completions.create({
     model: "gpt-4o-mini",
     temperature: 0.2,
