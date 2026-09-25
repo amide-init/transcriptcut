@@ -16,6 +16,9 @@ import { useWaveform } from "@/lib/timeline/useWaveform";
 import { DEFAULT_INTERVAL_SECONDS, MIN_INTERVAL_SECONDS, useThumbnails } from "@/lib/timeline/useThumbnails";
 import { Button } from "@/components/ui/button";
 import { Waveform } from "@/components/timeline/Waveform";
+import { useScenes } from "@/lib/timeline/useScenes";
+import { sceneColor } from "@/lib/timeline/scenes";
+import { Scissors } from "lucide-react";
 import type { CutOperation } from "@/types/edit-operation";
 
 /** Zoom is relative to "fit" (1x = whole timeline visible, no scrolling). */
@@ -47,7 +50,9 @@ export function Timeline() {
   const operations = useTimelineStore((s) => s.operations);
   const undo = useTimelineStore((s) => s.undo);
   const redo = useTimelineStore((s) => s.redo);
+  const undoStack = useTimelineStore((s) => s.undoStack);
   const redoStack = useTimelineStore((s) => s.redoStack);
+  const { scenes, splitAt } = useScenes();
 
   const cuts = useMemo(
     () => operations.filter((op): op is CutOperation => op.type === "cut"),
@@ -129,11 +134,22 @@ export function Timeline() {
             variant="outline"
             size="xs"
             onClick={undo}
-            disabled={operations.length === 0}
+            disabled={undoStack.length === 0}
+            title="Undo (⌘Z)"
           >
             Undo
           </Button>
-          <Button variant="outline" size="xs" onClick={redo} disabled={redoStack.length === 0}>
+          <Button
+            variant="outline"
+            size="xs"
+            onClick={() => splitAt(currentTime)}
+            disabled={duration <= 0}
+            title="Split into a new scene at the playhead (S)"
+          >
+            <Scissors className="size-3" />
+            Split
+          </Button>
+          <Button variant="outline" size="xs" onClick={redo} disabled={redoStack.length === 0} title="Redo (⇧⌘Z)">
             Redo
           </Button>
           <div className="mx-1 flex items-center gap-0.5">
@@ -154,6 +170,31 @@ export function Timeline() {
           className="flex flex-col gap-2"
           style={{ width: trackWidth > 0 ? `${trackWidth}px` : "100%" }}
         >
+          {scenes.length > 1 && editedDuration > 0 && (
+            <div className="relative h-5 w-full">
+              {scenes.map((scene) => {
+                const width = scene.editedEnd - scene.editedStart;
+                if (width <= 0) return null;
+                return (
+                  <button
+                    key={scene.id}
+                    type="button"
+                    onClick={() => seek(scene.start)}
+                    title={`${scene.title} (${formatTimecode(width)})`}
+                    className={`absolute top-0 h-full truncate rounded-sm border-l-2 px-1.5 text-left text-[0.65rem] leading-5 text-foreground hover:brightness-125 ${
+                      sceneColor(scene.index).block
+                    }`}
+                    style={{
+                      left: `${(scene.editedStart / editedDuration) * 100}%`,
+                      width: `${(width / editedDuration) * 100}%`,
+                    }}
+                  >
+                    {scene.title}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           <div
             ref={trackRef}
             onClick={handleTrackClick}
@@ -189,6 +230,13 @@ export function Timeline() {
                 />
               );
             })}
+            {scenes.slice(1).map((scene) => (
+              <div
+                key={scene.id}
+                className="pointer-events-none absolute top-0 h-full w-px bg-foreground/70"
+                style={{ left: `${(scene.editedStart / editedDuration) * 100}%` }}
+              />
+            ))}
             <div
               className="pointer-events-none absolute top-0 h-full w-0.5 bg-primary"
               style={{ left: `${playheadPosition}%` }}

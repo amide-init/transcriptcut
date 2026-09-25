@@ -77,4 +77,24 @@ describe("editOperationSchema", () => {
     const result = editOperationSchema.safeParse({ id: "1", type: "cut", start: 0, timestamp: 5, createdAt: 0 });
     expect(result.success).toBe(false);
   });
+
+  it("accepts a split with a scene title, source and group", () => {
+    expect(
+      editOperationSchema.safeParse({
+        id: "1",
+        type: "split",
+        timestamp: 42.5,
+        title: "Pricing",
+        source: "ai",
+        groupId: "g1",
+        createdAt: 0,
+      }).success
+    ).toBe(true);
+  });
+
+  it("rejects an over-long scene title and an unknown split source", () => {
+    const base = { id: "1", type: "split", timestamp: 3, createdAt: 0 };
+    expect(editOperationSchema.safeParse({ ...base, title: "x".repeat(81) }).success).toBe(false);
+    expect(editOperationSchema.safeParse({ ...base, source: "robot" }).success).toBe(false);
+  });
 });
