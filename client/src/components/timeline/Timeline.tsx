@@ -15,6 +15,7 @@ import { cardTextColor } from "@/lib/cards/layout";
 import { Button } from "@/components/ui/button";
 import { Waveform } from "@/components/timeline/Waveform";
 import { useScenes } from "@/lib/timeline/useScenes";
+import { useSceneSuggestionStore } from "@/stores/scene-suggestion-store";
 import { sceneColor } from "@/lib/timeline/scenes";
 import { Scissors } from "lucide-react";
 
@@ -51,6 +52,8 @@ export function Timeline() {
   const undoStack = useTimelineStore((s) => s.undoStack);
   const redoStack = useTimelineStore((s) => s.redoStack);
   const { scenes, splitAt } = useScenes();
+  const suggestions = useSceneSuggestionStore((s) => s.suggestions);
+  const shots = useSceneSuggestionStore((s) => s.shots);
 
   // Everything on the track is laid out on program time: kept footage with
   // title cards in between (lib/timeline/program.ts).
@@ -302,6 +305,24 @@ export function Timeline() {
                 style={{ width: `${(program.fadeOut.seconds / totalDuration) * 100}%` }}
               />
             )}
+            {/* Suggestions under review (dashed) and detected shot changes (ticks) -- not edits yet. */}
+            {shots?.map((t) => (
+              <div
+                key={`shot-${t}`}
+                className="pointer-events-none absolute bottom-0 h-2 w-px bg-foreground/50"
+                style={{ left: `${percentAt(t)}%` }}
+              />
+            ))}
+            {suggestions
+              ?.filter((s) => s.keep && s.at > 0)
+              .map((s) => (
+                <div
+                  key={`suggestion-${s.key}`}
+                  className="pointer-events-none absolute top-0 h-full border-l-2 border-dashed border-primary"
+                  style={{ left: `${percentAt(s.at, false)}%` }}
+                  title={`Suggested scene: ${s.title}`}
+                />
+              ))}
             {scenes.slice(1).map((scene) => (
               <div
                 key={scene.id}

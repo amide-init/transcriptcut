@@ -22,6 +22,8 @@ type TimelineStore = {
   addSplit: (timestamp: number, title?: string) => void;
   /** Adds several operations as one undo step (they share a groupId). */
   addOperations: (ops: EditOperation[]) => void;
+  /** Adds and removes operations together as one undo step (e.g. applying scene suggestions). */
+  applyChange: (added: EditOperation[], removedIds: string[]) => void;
   /** Swaps one operation for a new version of it, as one undo step. */
   replaceOperation: (operationId: string, next: EditOperation) => void;
   /**
@@ -129,6 +131,13 @@ export const useTimelineStore = create<TimelineStore>((set, get) => {
       if (ops.length === 0) return;
       const groupId = crypto.randomUUID();
       commit({ added: ops.map((op) => ({ ...op, groupId })), removed: [] });
+    },
+
+    applyChange: (added, removedIds) => {
+      const ids = new Set(removedIds);
+      const removed = get().operations.filter((op) => ids.has(op.id));
+      const groupId = crypto.randomUUID();
+      commit({ added: added.map((op) => ({ ...op, groupId })), removed });
     },
 
     replaceOperation: (operationId, next) => {
