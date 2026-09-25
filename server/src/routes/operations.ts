@@ -33,6 +33,10 @@ operationsRoute.post("/:id/operations", async (c) => {
   if (op.type === "split" && project.duration && op.timestamp >= project.duration) {
     return errorResponse(c, "INVALID_OPERATION", "Split must fall inside the video.", 400);
   }
+  // A card at the duration is an outro; past it there's nothing to play before.
+  if (op.type === "card" && project.duration && op.at > project.duration) {
+    return errorResponse(c, "INVALID_OPERATION", "Card must be placed inside the video.", 400);
+  }
 
   // Client generates the id (needed so undo/redo can address the exact row);
   // upsert so a redo that restores a previously-undone op is idempotent.
