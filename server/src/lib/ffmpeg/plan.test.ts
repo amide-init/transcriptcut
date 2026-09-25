@@ -72,7 +72,9 @@ describe("buildRenderArgs: basic structure", () => {
       ],
     });
     const filterComplex = argv[argv.indexOf("-filter_complex") + 1];
-    expect(filterComplex).toContain("[0:v]trim=start=0.000:end=3.000,setpts=PTS-STARTPTS,fps=30000/1001[v0]");
+    expect(filterComplex).toContain(
+      "[0:v]trim=start=0.000:end=3.000,setpts=PTS-STARTPTS,fps=30000/1001,tpad=stop_mode=clone:stop_duration=0.1[v0]"
+    );
     expect(filterComplex).toContain("[0:v]trim=start=5.000:end=8.000,setpts=PTS-STARTPTS,fps=30000/1001[v1]");
     // Both 3s segments comfortably fit the default 0.03s crossfade: offset
     // is the first segment's own length (3.0) minus that 0.03s.
