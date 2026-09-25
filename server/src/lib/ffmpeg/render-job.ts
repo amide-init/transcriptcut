@@ -22,7 +22,7 @@ import {
 } from "@/lib/ffmpeg/audio-filters";
 import { parseStoredAudioSettings } from "@/lib/validation/audio-settings";
 import { runFfmpeg, runFfmpegCapturingStderr } from "@/lib/ffmpeg/run";
-import { probeVideoDimensions } from "@/lib/ffmpeg/probe";
+import { probeVideoStream } from "@/lib/ffmpeg/probe";
 import { generateCaptions, splitCuesForShorts } from "@/lib/captions/generate";
 import { toAssKaraoke, toSrt } from "@/lib/captions/format";
 import { DEFAULT_CAPTION_STYLE, type CaptionStyle } from "@/lib/captions/style";
@@ -196,14 +196,12 @@ export async function runRenderJob(
     const captionStyle = clip ? shortsCaptionStyle(project.captionStyleJson) : options.captionStyle;
     const useKaraoke = burnInCaptions && captionStyle?.wordHighlight === true;
 
-    // Needed to size the logo overlay relative to the frame, and to convert
-    // force_style's fontSize/margin from percent-of-frame into the literal
-    // output pixels it actually requires (see ffmpeg/plan.ts) -- skip the
-    // probe when neither applies. The karaoke .ass path doesn't need this:
-    // it scales itself via PlayResX/Y instead (see lib/captions/format.ts).
-    // A clip's output size is known up front; no probe needed.
-    const needsVideoDimensions = !clipFrame && (useLogo || (burnInCaptions && !useKaraoke));
-    const videoDimensions = clipFrame ?? (needsVideoDimensions ? await probeVideoDimensions(inputPath) : undefined);
+    // Every video render needs the source's frame rate (see ffmpeg/plan.ts).
+    // The same probe gives its size, which sizes the logo overlay and
+    // converts force_style's percent-of-frame font size/margin into output
+    // pixels. A clip's output size is known up front, so it's used instead.
+    const sourceStream = isVideo ? await probeVideoStream(inputPath) : undefined;
+    const videoDimensions = clipFrame ?? sourceStream;
 
     if (burnInCaptions) {
       if (!project.transcript) throw new Error("Captions were requested but this project has no transcript.");
@@ -268,6 +266,7 @@ export async function runRenderJob(
           audioFilter,
           metadataPath,
           reframe: clip && clipFrame ? { ...clipFrame, cropX: clip.cropX } : undefined,
+          frameRate: sourceStream!.fps,
         })
       : buildAudioOnlyRenderArgs({ inputPath, outputPath, playableRanges, audioFilter, format, metadataPath });
     await runFfmpeg(args);

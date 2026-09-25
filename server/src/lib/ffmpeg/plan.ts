@@ -30,6 +30,9 @@ import type { VideoProperties } from "@/types/video-properties";
  */
 const CUT_CROSSFADE_SECONDS = 0.03;
 
+/** Cloned frames after each segment but the last; see buildRenderArgs. */
+const SEGMENT_TAIL_PAD = "tpad=stop_mode=clone:stop_duration=0.1";
+
 /** Percent of frame width/height, not raw pixels -- see lib/video/logo.ts. */
 function clampPaddingPercent(v: number): number {
   return Math.min(LOGO_PADDING_MAX_PERCENT, Math.max(LOGO_PADDING_MIN_PERCENT, v));
@@ -263,6 +266,12 @@ export function buildRenderArgs(args: {
    * callers pass the output size as videoWidth/videoHeight.
    */
   reframe?: { width: number; height: number; cropX: number };
+  /**
+   * The source's frame rate as ffprobe reports it ("30000/1001", from
+   * probe.ts#probeVideoStream). Every segment is pinned to it before the
+   * xfade joins -- see the comment where it's applied.
+   */
+  frameRate: string;
 }): string[] {
   const {
     inputPath,
@@ -282,13 +291,33 @@ export function buildRenderArgs(args: {
     audioFilter,
     metadataPath,
     reframe,
+    frameRate,
   } = args;
 
   assertValidRanges(playableRanges);
+  if (!/^\d{1,6}(\/\d{1,6})?$/.test(frameRate)) throw new Error(`Invalid frame rate: ${frameRate}`);
 
+  // fps= pins each trimmed segment to the source's frame rate. Without it,
+  // xfade on ffmpeg 9 drops the start of every segment after a join: the
+  // second input's frames before `offset` are consumed and discarded instead
+  // of being held until the transition, so each cut silently lost footage
+  // (measured on 9.0.2: a 2s + 10s join came out 10.0s long, the second
+  // segment starting ~2s late). With an explicit rate on both inputs the
+  // join lands where the offset says (11.98s, correct frames).
+  //
+  // tpad= then pads every segment but the last with a few cloned frames. A
+  // segment is a whole number of frames, so it can end up to a frame short
+  // of the length the offsets assume; when the stream built so far runs out
+  // before its join's transition finishes, ffmpeg 9 ends the join there and
+  // everything after it is lost (measured: a 5s + 10s + 2s chain came out
+  // 14.9s, the last segment gone). xfade discards the first input's frames
+  // after the transition, so the padding never reaches the output.
   const filterChains: string[] = [];
   playableRanges.forEach((r, i) => {
-    filterChains.push(`[0:v]trim=start=${r.start.toFixed(3)}:end=${r.end.toFixed(3)},setpts=PTS-STARTPTS[v${i}]`);
+    const pad = i < playableRanges.length - 1 ? `,${SEGMENT_TAIL_PAD}` : "";
+    filterChains.push(
+      `[0:v]trim=start=${r.start.toFixed(3)}:end=${r.end.toFixed(3)},setpts=PTS-STARTPTS,fps=${frameRate}${pad}[v${i}]`
+    );
   });
 
   if (playableRanges.length === 1) {
