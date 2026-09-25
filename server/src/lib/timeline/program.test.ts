@@ -3,6 +3,7 @@ import {
   buildProgram,
   buildProgramItems,
   isPlainProgram,
+  placeOverlays,
   cardStartTimes,
   cardsDuration,
   editedRangeToProgram,
@@ -190,5 +191,39 @@ describe("transitions", () => {
       { kind: "source", start: 45, end: 100 },
     ]);
     expect(p.joins[0]).toMatchObject({ kind: "dip" });
+  });
+});
+
+describe("placeOverlays", () => {
+  const overlay = (id: string, start: number, end: number): EditOperation => ({
+    id,
+    type: "overlay",
+    assetId: "a1",
+    start,
+    end,
+    mode: "full",
+    createdAt: 0,
+  });
+  const place = (ops: EditOperation[]) => {
+    const ranges = computePlayableRanges(
+      100,
+      ops.filter((op): op is CutOperation => op.type === "cut")
+    );
+    return placeOverlays(ops, ranges, placeCards(ops, ranges, 100)).map((p) => [p.overlay.id, p.start, p.end]);
+  };
+
+  it("maps B-roll through cuts and past earlier cards", () => {
+    expect(place([cut(0, 10), card("intro", 0, 2), overlay("b", 20, 25)])).toEqual([["b", 12, 17]]);
+  });
+
+  it("shortens B-roll whose range was partly cut, and drops it when cut entirely", () => {
+    expect(place([cut(22, 24), overlay("part", 20, 25), overlay("gone", 50, 55), cut(49, 56)])).toEqual([
+      ["part", 20, 23],
+    ]);
+  });
+
+  it("doesn't run over a card at its start or end", () => {
+    expect(place([card("mid", 40, 3), overlay("b", 40, 45)])).toEqual([["b", 43, 48]]);
+    expect(place([card("mid", 40, 3), overlay("b", 35, 40)])).toEqual([["b", 35, 40]]);
   });
 });

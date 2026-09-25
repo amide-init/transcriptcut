@@ -1,4 +1,10 @@
-import type { CardOperation, EditOperation, SplitOperation, TransitionOperation } from "@/types/edit-operation";
+import type {
+  CardOperation,
+  EditOperation,
+  OverlayOperation,
+  SplitOperation,
+  TransitionOperation,
+} from "@/types/edit-operation";
 import type { PlayableRange } from "@/types/timeline";
 import { nextPlayableTime, sourceTimeToEditedTime } from "@/lib/timeline/cuts";
 
@@ -284,7 +290,39 @@ export type Program = {
   joins: Join[];
   fadeIn: Fade | null;
   fadeOut: Fade | null;
+  overlays: PlacedOverlay[];
 };
+
+/** B-roll on the program timeline. */
+export type PlacedOverlay = { overlay: OverlayOperation; start: number; end: number };
+
+/** Shorter than this after cuts, B-roll would only flash on screen, so it's dropped. */
+const MIN_OVERLAY_SECONDS = 0.1;
+
+/**
+ * Places B-roll on the program timeline. Its source range follows cuts:
+ * cutting part of it shortens it, cutting all of it drops it. It starts
+ * after a card at its start moment and ends before one at its end, like a
+ * caption, so it never covers a title card at its edges.
+ */
+export function placeOverlays(
+  operations: EditOperation[],
+  ranges: PlayableRange[],
+  slots: CardSlot[]
+): PlacedOverlay[] {
+  return operations
+    .filter((op): op is OverlayOperation => op.type === "overlay")
+    .map((overlay) => ({
+      overlay,
+      ...editedRangeToProgram(
+        sourceTimeToEditedTime(overlay.start, ranges),
+        sourceTimeToEditedTime(overlay.end, ranges),
+        slots
+      ),
+    }))
+    .filter((p) => p.end - p.start >= MIN_OVERLAY_SECONDS)
+    .sort((a, b) => a.start - b.start || a.overlay.createdAt - b.overlay.createdAt);
+}
 
 export function buildProgram(operations: EditOperation[], ranges: PlayableRange[], sourceDuration: number): Program {
   const slots = placeCards(operations, ranges, sourceDuration);
@@ -294,7 +332,14 @@ export function buildProgram(operations: EditOperation[], ranges: PlayableRange[
     slots,
     markers.map((m) => m.editedAt)
   );
-  return { slots, items, joins: resolveJoins(items, markers), fadeIn, fadeOut };
+  return {
+    slots,
+    items,
+    joins: resolveJoins(items, markers),
+    fadeIn,
+    fadeOut,
+    overlays: placeOverlays(operations, ranges, slots),
+  };
 }
 
 /** True when the program is just the playable ranges, cut together as always. */
