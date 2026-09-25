@@ -5,6 +5,9 @@ import {
   CARD_SUBTITLE_MAX,
   CARD_TEMPLATES,
   CARD_TITLE_MAX,
+  TRANSITION_KINDS,
+  TRANSITION_MAX_SECONDS,
+  TRANSITION_MIN_SECONDS,
 } from "@/types/edit-operation";
 
 /**
@@ -63,6 +66,15 @@ export const editOperationSchema = z.discriminatedUnion("type", [
     title: cardText(CARD_TITLE_MAX).pipe(z.string().min(1)),
     subtitle: cardText(CARD_SUBTITLE_MAX).optional(),
     background: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+    createdAt: z.number(),
+    groupId: z.string().min(1).max(100).optional(),
+  }),
+  z.object({
+    id: z.string().min(1),
+    type: z.literal("transition"),
+    at: z.number().nonnegative(),
+    kind: z.enum(TRANSITION_KINDS),
+    duration: z.number().min(TRANSITION_MIN_SECONDS).max(TRANSITION_MAX_SECONDS),
     createdAt: z.number(),
     groupId: z.string().min(1).max(100).optional(),
   }),
