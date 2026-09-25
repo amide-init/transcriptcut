@@ -19,7 +19,7 @@ export function AiToolsPanel() {
   const setSilenceGaps = useTranscriptStore((s) => s.setSilenceGaps);
 
   const projectId = useProjectStore((s) => s.id);
-  const addCut = useTimelineStore((s) => s.addCut);
+  const addCuts = useTimelineStore((s) => s.addCuts);
 
   const allWords = useMemo(
     () => transcript?.segments.flatMap((seg) => seg.words) ?? [],
@@ -43,11 +43,11 @@ export function AiToolsPanel() {
 
   const handleRemoveFillerWords = () => {
     const fillerWordIdSet = new Set(fillerWordIds);
-    for (const word of allWords) {
-      if (fillerWordIdSet.has(word.id)) {
-        addCut(padCutStart(word.start, allWords), word.end, "filler word");
-      }
-    }
+    addCuts(
+      allWords
+        .filter((word) => fillerWordIdSet.has(word.id))
+        .map((word) => ({ start: padCutStart(word.start, allWords), end: word.end, reason: "filler word" }))
+    );
     setFillerWordIds([]);
   };
 
@@ -58,9 +58,7 @@ export function AiToolsPanel() {
 
   const handleRemoveSilences = () => {
     if (!silenceGaps) return;
-    for (const gap of silenceGaps) {
-      addCut(gap.start, gap.end, "long pause");
-    }
+    addCuts(silenceGaps.map((gap) => ({ start: gap.start, end: gap.end, reason: "long pause" })));
     setSilenceGaps(null);
   };
 
