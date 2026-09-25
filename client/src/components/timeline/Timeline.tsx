@@ -6,7 +6,7 @@ import { useProjectStore } from "@/stores/project-store";
 import { useTimelineStore } from "@/stores/timeline-store";
 import { useTranscriptStore } from "@/stores/transcript-store";
 import { editedTimeToSourceTime, sourceTimeToEditedTime } from "@/lib/timeline/cuts";
-import { editedToProgramTime, locateProgramTime, programItemDuration } from "@/lib/timeline/program";
+import { editedToProgramTime, itemStartTimes, locateProgramTime, programItemDuration } from "@/lib/timeline/program";
 import { programPlayhead, useProgram } from "@/lib/timeline/useProgram";
 import { formatTimecode } from "@/lib/timeline/format";
 import { useWaveform } from "@/lib/timeline/useWaveform";
@@ -59,6 +59,7 @@ export function Timeline() {
   const totalDuration = program.duration;
   const programTime = programPlayhead(program, currentTime, card);
   const playheadPosition = totalDuration > 0 ? (programTime / totalDuration) * 100 : 0;
+  const itemStarts = useMemo(() => itemStartTimes(program.items), [program.items]);
   /** Percent across the track of a source time (after any card at that moment unless noted). */
   const percentAt = (sourceTime: number, includeCardsAtPoint = true) =>
     (editedToProgramTime(sourceTimeToEditedTime(sourceTime, playableRanges), slots, { includeCardsAtPoint }) /
@@ -274,6 +275,33 @@ export function Timeline() {
                 />
               );
             })}
+            {/* Transitions: a diamond on each styled join, a wedge where the episode fades in or out. */}
+            {program.joins.map((join, j) => {
+              if (join.kind === "cut") return null;
+              const at = itemStarts[j + 1];
+              const label =
+                join.kind === "crossfade" ? "Crossfade" : join.color === "white" ? "Dip to white" : "Dip to black";
+              return (
+                <div
+                  key={`join-${j}`}
+                  className="pointer-events-none absolute top-1 size-2.5 -translate-x-1/2 rotate-45 rounded-[2px] border border-background bg-primary"
+                  style={{ left: `${(at / totalDuration) * 100}%` }}
+                  title={`${label} (${join.seconds}s)`}
+                />
+              );
+            })}
+            {program.fadeIn && (
+              <div
+                className="pointer-events-none absolute top-0 left-0 h-full bg-gradient-to-r from-black/70 to-transparent"
+                style={{ width: `${(program.fadeIn.seconds / totalDuration) * 100}%` }}
+              />
+            )}
+            {program.fadeOut && (
+              <div
+                className="pointer-events-none absolute top-0 right-0 h-full bg-gradient-to-l from-black/70 to-transparent"
+                style={{ width: `${(program.fadeOut.seconds / totalDuration) * 100}%` }}
+              />
+            )}
             {scenes.slice(1).map((scene) => (
               <div
                 key={scene.id}
