@@ -22,15 +22,15 @@ import {
 } from "@/lib/ffmpeg/audio-filters";
 import { parseStoredAudioSettings } from "@/lib/validation/audio-settings";
 import { runFfmpeg, runFfmpegCapturingStderr } from "@/lib/ffmpeg/run";
+import type { RenderProgram } from "@/lib/ffmpeg/plan";
 import { probeVideoStream } from "@/lib/ffmpeg/probe";
 import {
-  buildProgramItems,
+  buildProgram,
   cardStartTimes,
   cardsDuration,
   editedRangeToProgram,
-  placeCards,
+  isPlainProgram,
   type CardSlot,
-  type ProgramItem,
 } from "@/lib/timeline/program";
 import { toCardsAss } from "@/lib/cards/ass";
 import type { CaptionCue } from "@/lib/captions/generate";
@@ -75,7 +75,7 @@ export async function resolveLoudnessGain(
   playableRanges: PlayableRange[],
   audioSettings: AudioSettings,
   jobId: string,
-  program?: ProgramItem[]
+  program?: RenderProgram
 ): Promise<number | undefined> {
   const target = loudnessTargetLufs(audioSettings);
   if (target === null) return undefined;
@@ -192,9 +192,13 @@ export async function runRenderJob(
       ...(clip ? clipAsCuts(clip, project.duration) : []),
     ];
     const playableRanges = computePlayableRanges(project.duration, cuts);
-    // Title cards play in full exports only: a clip is a standalone excerpt.
-    const cardSlots = clip ? [] : placeCards(operations, playableRanges, project.duration);
-    const program = cardSlots.length > 0 ? buildProgramItems(playableRanges, cardSlots) : undefined;
+    // Title cards and transitions play in full exports only: a clip is a standalone excerpt.
+    const built = clip ? null : buildProgram(operations, playableRanges, project.duration);
+    const cardSlots = built?.slots ?? [];
+    const program: RenderProgram | undefined =
+      built && !isPlainProgram(built)
+        ? { items: built.items, joins: built.joins, fadeIn: built.fadeIn, fadeOut: built.fadeOut }
+        : undefined;
 
     const inputPath = resolveInDataDir(originalAsset.filePath);
     const outputRelativePath = path.posix.join(
@@ -229,9 +233,9 @@ export async function runRenderJob(
 
     // Title cards are generated at the source's own size so they join it seamlessly.
     let cardFrame: { width: number; height: number; textPath: string } | undefined;
-    if (program && sourceStream) {
+    if (program && cardSlots.length > 0 && sourceStream) {
       const textPath = resolveInDataDir(path.posix.join("projects", project.id, "render", `${jobId}.cards.ass`));
-      await writeFile(textPath, toCardsAss(cardStartTimes(program), sourceStream), "utf-8");
+      await writeFile(textPath, toCardsAss(cardStartTimes(program.items), sourceStream), "utf-8");
       cardFrame = { width: sourceStream.width, height: sourceStream.height, textPath };
     }
 

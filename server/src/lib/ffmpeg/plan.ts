@@ -1,5 +1,5 @@
 import type { PlayableRange } from "@/types/timeline";
-import type { ProgramItem } from "@/lib/timeline/program";
+import type { Fade, Join, ProgramItem } from "@/lib/timeline/program";
 import { getFfmpegFilter } from "@/lib/ffmpeg/filters";
 import { buildPropertiesFilter } from "@/lib/ffmpeg/properties";
 import { buildForceStyle, type CaptionStyle } from "@/lib/captions/style";
@@ -80,24 +80,10 @@ function assertValidRanges(playableRanges: PlayableRange[]): void {
 }
 
 /**
- * What to render, in order: the program (lib/timeline/program.ts) when the
- * project has title cards, otherwise just the playable ranges. Validated
- * here since card durations and colors end up in the filtergraph.
+ * What to render when it's more than the playable ranges cut together: the
+ * program from lib/timeline/program.ts (cards, transitions, fades).
  */
-function resolveItems(playableRanges: PlayableRange[], program?: ProgramItem[]): ProgramItem[] {
-  if (!program) {
-    assertValidRanges(playableRanges);
-    return playableRanges.map((r) => ({ kind: "source", start: r.start, end: r.end }));
-  }
-  assertValidRanges(program.flatMap((item) => (item.kind === "source" ? [item] : [])));
-  for (const item of program) {
-    if (item.kind !== "card") continue;
-    const { duration, background } = item.card;
-    if (!Number.isFinite(duration) || duration <= 0 || duration > 60) throw new Error("Invalid card duration.");
-    if (!/^#[0-9a-fA-F]{6}$/.test(background)) throw new Error("Invalid card background color.");
-  }
-  return program;
-}
+export type RenderProgram = { items: ProgramItem[]; joins: Join[]; fadeIn: Fade | null; fadeOut: Fade | null };
 
 function assertValidCardFrame(frame: { width: number; height: number }): void {
   const { width, height } = frame;
@@ -106,11 +92,141 @@ function assertValidCardFrame(frame: { width: number; height: number }): void {
   }
 }
 
-function itemDuration(item: ProgramItem): number {
-  return item.kind === "card" ? item.card.duration : item.end - item.start;
+const assertSeconds = (seconds: number, what: string) => {
+  if (!Number.isFinite(seconds) || seconds <= 0 || seconds > 60) throw new Error(`Invalid ${what} length.`);
+};
+const assertColor = (color: string) => {
+  if (color !== "black" && color !== "white") throw new Error("Invalid transition color.");
+};
+
+/** Longest audio fade at a dip between items: speech sits right next to scene boundaries. */
+const DIP_AUDIO_MAX_SECONDS = 0.3;
+/** Longest audio fade at the very start or end of the episode. */
+const EDGE_AUDIO_MAX_SECONDS = 1;
+
+type ItemFade = { color: "black" | "white"; seconds: number; audioSeconds: number };
+
+/**
+ * Everything the video and audio graphs need to agree on, per item: how
+ * long it renders, how much of it overlaps the item before, and any fade
+ * at its edges. Shared so the two graphs stay in sync.
+ */
+type Layout = {
+  items: ProgramItem[];
+  withCards: boolean;
+  /** Seconds each item renders for; a card grows by any crossfade into or out of it. */
+  lengths: number[];
+  /** Overlap of the join from item i-1 into item i (entry 0 unused). */
+  overlaps: number[];
+  fadeIns: (ItemFade | null)[];
+  fadeOuts: (ItemFade | null)[];
+};
+
+/**
+ * Lays out what to render. Without a program that's the playable ranges
+ * with the usual 30ms joins -- the graph every project without cards or
+ * transitions has always had.
+ *
+ * Transitions never change the program's length: a dip fades each side's
+ * own edge and keeps the usual join, and a crossfade's overlap is added to
+ * the card it blends with, so the footage around it keeps its timing.
+ */
+function layoutProgram(playableRanges: PlayableRange[], program?: RenderProgram): Layout {
+  if (!program) assertValidRanges(playableRanges);
+  const items: ProgramItem[] =
+    program?.items ?? playableRanges.map((r) => ({ kind: "source", start: r.start, end: r.end }));
+  const joins: Join[] = program?.joins ?? items.slice(1).map(() => ({ kind: "cut" }));
+  if (program) {
+    assertValidRanges(items.flatMap((item) => (item.kind === "source" ? [item] : [])));
+    if (joins.length !== items.length - 1) throw new Error("Program joins don't match its items.");
+    for (const item of items) {
+      if (item.kind !== "card") continue;
+      assertSeconds(item.card.duration, "card");
+      if (!/^#[0-9a-fA-F]{6}$/.test(item.card.background)) throw new Error("Invalid card background color.");
+    }
+    for (const join of joins) {
+      if (join.kind === "cut") continue;
+      assertSeconds(join.seconds, "transition");
+      if (join.kind === "dip") assertColor(join.color);
+    }
+    for (const fade of [program.fadeIn, program.fadeOut]) {
+      if (!fade) continue;
+      assertSeconds(fade.seconds, "fade");
+      assertColor(fade.color);
+    }
+  }
+
+  const logical = items.map((item) => (item.kind === "card" ? item.card.duration : item.end - item.start));
+  const lengths = [...logical];
+  const overlaps = logical.map(() => 0);
+  const fadeIns: (ItemFade | null)[] = logical.map(() => null);
+  const fadeOuts: (ItemFade | null)[] = logical.map(() => null);
+
+  joins.forEach((join, j) => {
+    const i = j + 1;
+    const room = Math.min(logical[i - 1], logical[i]) / 2;
+    if (join.kind === "crossfade") {
+      const overlap = Math.min(join.seconds, room);
+      overlaps[i] = overlap;
+      // Grow the card side so the footage keeps its timing (the next card, if both are).
+      if (items[i].kind === "card") lengths[i] += overlap;
+      else lengths[i - 1] += overlap;
+      return;
+    }
+    overlaps[i] = Math.min(CUT_CROSSFADE_SECONDS, room);
+    if (join.kind === "dip") {
+      const seconds = Math.min(join.seconds / 2, room);
+      const fade = { color: join.color, seconds, audioSeconds: Math.min(seconds, DIP_AUDIO_MAX_SECONDS) };
+      fadeOuts[i - 1] = fade;
+      fadeIns[i] = fade;
+    }
+  });
+  const edge = (fade: Fade | null, length: number): ItemFade | null => {
+    if (!fade) return null;
+    const seconds = Math.min(fade.seconds, length / 2);
+    return { color: fade.color, seconds, audioSeconds: Math.min(seconds, EDGE_AUDIO_MAX_SECONDS) };
+  };
+  if (items.length > 0) {
+    fadeIns[0] = edge(program?.fadeIn ?? null, logical[0]);
+    const last = items.length - 1;
+    fadeOuts[last] = edge(program?.fadeOut ?? null, logical[last]) ?? fadeOuts[last];
+  }
+
+  return {
+    items,
+    withCards: items.some((item) => item.kind === "card"),
+    lengths,
+    overlaps,
+    fadeIns,
+    fadeOuts,
+  };
 }
 
-const hasCards = (items: ProgramItem[]) => items.some((item) => item.kind === "card");
+/** fade= filters for item i's edges, appended to its video chain. */
+function videoFades(layout: Layout, i: number): string {
+  const parts: string[] = [];
+  const fadeIn = layout.fadeIns[i];
+  const fadeOut = layout.fadeOuts[i];
+  if (fadeIn) parts.push(`fade=t=in:st=0:d=${fadeIn.seconds.toFixed(3)}:color=${fadeIn.color}`);
+  if (fadeOut) {
+    const start = layout.lengths[i] - fadeOut.seconds;
+    parts.push(`fade=t=out:st=${start.toFixed(3)}:d=${fadeOut.seconds.toFixed(3)}:color=${fadeOut.color}`);
+  }
+  return parts.map((p) => `,${p}`).join("");
+}
+
+/** afade= filters for item i's edges, appended to its audio chain. */
+function audioFades(layout: Layout, i: number): string {
+  const parts: string[] = [];
+  const fadeIn = layout.fadeIns[i];
+  const fadeOut = layout.fadeOuts[i];
+  if (fadeIn) parts.push(`afade=t=in:st=0:d=${fadeIn.audioSeconds.toFixed(3)}`);
+  if (fadeOut) {
+    const start = layout.lengths[i] - fadeOut.audioSeconds;
+    parts.push(`afade=t=out:st=${start.toFixed(3)}:d=${fadeOut.audioSeconds.toFixed(3)}`);
+  }
+  return parts.map((p) => `,${p}`).join("");
+}
 
 /**
  * Cards join the source through xfade/acrossfade, which need identical
@@ -130,36 +246,28 @@ const CARD_AUDIO_FORMAT = "aformat=sample_fmts=fltp:sample_rates=48000:channel_l
 const CARD_VIDEO_FORMAT = "format=yuv420p,setsar=1";
 
 /**
- * Crossfade length at each join: entry i is the fade between range i-1 and
- * range i (entry 0 is unused). Each is clamped to at most half of either
- * adjacent segment's own (pre-join) length, so a short surviving sliver
- * between two nearby cuts can't make the transition eat more than that
- * sliver. Shared by the video and audio graphs so they stay in sync.
- */
-function computeCrossfades(durations: number[]): number[] {
-  return durations.map((d, i) => (i === 0 ? 0 : Math.min(CUT_CROSSFADE_SECONDS, durations[i - 1] / 2, d / 2)));
-}
-
-/**
  * atrim + acrossfade chains ending in [outa]: the edited program's audio,
- * before any cleanup. Cards contribute silence for their duration.
+ * before any cleanup. Cards contribute silence for their render length.
+ * Join overlaps come from the layout, which also clamps each one to at most
+ * half of either neighbour, so a short sliver between two nearby cuts
+ * can't be eaten by a transition.
  */
-function buildAudioEditChains(items: ProgramItem[]): string[] {
-  const normalize = hasCards(items) ? `,${CARD_AUDIO_FORMAT}` : "";
+function buildAudioEditChains(layout: Layout): string[] {
+  const { items, lengths, overlaps } = layout;
+  const normalize = layout.withCards ? `,${CARD_AUDIO_FORMAT}` : "";
   const chains = items.map((item, i) =>
     item.kind === "source"
-      ? `[0:a]atrim=start=${item.start.toFixed(3)}:end=${item.end.toFixed(3)},asetpts=PTS-STARTPTS${normalize}[a${i}]`
-      : `anullsrc=r=48000:cl=stereo,atrim=duration=${item.card.duration.toFixed(3)}${normalize}[a${i}]`
+      ? `[0:a]atrim=start=${item.start.toFixed(3)}:end=${item.end.toFixed(3)},asetpts=PTS-STARTPTS${normalize}${audioFades(layout, i)}[a${i}]`
+      : `anullsrc=r=48000:cl=stereo,atrim=duration=${lengths[i].toFixed(3)}${normalize}${audioFades(layout, i)}[a${i}]`
   );
   if (items.length === 1) {
     chains.push("[a0]anull[outa]");
     return chains;
   }
-  const crossfades = computeCrossfades(items.map(itemDuration));
   let label = "a0";
   for (let i = 1; i < items.length; i++) {
     const next = i === items.length - 1 ? "outa" : `ax${i}`;
-    chains.push(`[${label}][a${i}]acrossfade=d=${crossfades[i].toFixed(3)}[${next}]`);
+    chains.push(`[${label}][a${i}]acrossfade=d=${overlaps[i].toFixed(3)}[${next}]`);
     label = next;
   }
   return chains;
@@ -174,13 +282,13 @@ function buildAudioEditChains(items: ProgramItem[]): string[] {
 export function buildLoudnessAnalysisArgs(args: {
   inputPath: string;
   playableRanges: PlayableRange[];
-  /** With title cards: the program, whose cards add silence (see resolveItems). */
-  program?: ProgramItem[];
+  /** With cards or transitions: the program, so the measured audio is what ships. */
+  program?: RenderProgram;
   /** From audio-filters.ts#buildLoudnessAnalysisChain. */
   analysisChain: string;
 }): string[] {
-  const items = resolveItems(args.playableRanges, args.program);
-  const chains = [...buildAudioEditChains(items), `[outa]${args.analysisChain}[analysis]`];
+  const layout = layoutProgram(args.playableRanges, args.program);
+  const chains = [...buildAudioEditChains(layout), `[outa]${args.analysisChain}[analysis]`];
   return ["-i", args.inputPath, "-filter_complex", chains.join(";"), "-map", "[analysis]", "-f", "null", "-"];
 }
 
@@ -207,15 +315,15 @@ export function buildAudioOnlyRenderArgs(args: {
   inputPath: string;
   outputPath: string;
   playableRanges: PlayableRange[];
-  /** With title cards: the program, so cards become silence and chapters stay in sync. */
-  program?: ProgramItem[];
+  /** With cards or transitions: the program, so cards become silence and chapters stay in sync. */
+  program?: RenderProgram;
   audioFilter?: string | null;
   format?: "m4a" | "mp3" | "wav";
   metadataPath?: string;
 }): string[] {
-  const items = resolveItems(args.playableRanges, args.program);
+  const layout = layoutProgram(args.playableRanges, args.program);
   const format = args.format ?? "m4a";
-  const chains = buildAudioEditChains(items);
+  const chains = buildAudioEditChains(layout);
   let label = "[outa]";
   if (args.audioFilter) {
     chains.push(`[outa]${args.audioFilter}[cleana]`);
@@ -335,7 +443,7 @@ export function buildRenderArgs(args: {
    * file with every card's text (lib/cards/ass.ts). Omit for a project
    * without cards.
    */
-  program?: ProgramItem[];
+  program?: RenderProgram;
   cardFrame?: { width: number; height: number; textPath: string };
 }): string[] {
   const {
@@ -361,9 +469,9 @@ export function buildRenderArgs(args: {
     cardFrame,
   } = args;
 
-  const items = resolveItems(playableRanges, program);
+  const layout = layoutProgram(playableRanges, program);
+  const { items, lengths, overlaps, withCards } = layout;
   if (!/^\d{1,6}(\/\d{1,6})?$/.test(frameRate)) throw new Error(`Invalid frame rate: ${frameRate}`);
-  const withCards = hasCards(items);
   if (withCards && !cardFrame) throw new Error("Title cards need the source's frame size.");
   if (cardFrame) assertValidCardFrame(cardFrame);
 
@@ -389,10 +497,11 @@ export function buildRenderArgs(args: {
   const filterChains: string[] = [];
   items.forEach((item, i) => {
     const pad = i < items.length - 1 ? `,${SEGMENT_TAIL_PAD}` : "";
+    const fades = videoFades(layout, i);
     if (!withCards) {
       const r = item as Extract<ProgramItem, { kind: "source" }>;
       filterChains.push(
-        `[0:v]trim=start=${r.start.toFixed(3)}:end=${r.end.toFixed(3)},setpts=PTS-STARTPTS,fps=${frameRate}${pad}[v${i}]`
+        `[0:v]trim=start=${r.start.toFixed(3)}:end=${r.end.toFixed(3)},setpts=PTS-STARTPTS,fps=${frameRate}${fades}${pad}[v${i}]`
       );
       return;
     }
@@ -402,12 +511,12 @@ export function buildRenderArgs(args: {
     if (item.kind === "source") {
       const grade = colorFilter ? `,${colorFilter}` : "";
       filterChains.push(
-        `[0:v]trim=start=${item.start.toFixed(3)}:end=${item.end.toFixed(3)},setpts=PTS-STARTPTS${grade},fps=${frameRate},${CARD_VIDEO_FORMAT}${pad}[v${i}]`
+        `[0:v]trim=start=${item.start.toFixed(3)}:end=${item.end.toFixed(3)},setpts=PTS-STARTPTS${grade},fps=${frameRate},${CARD_VIDEO_FORMAT}${fades}${pad}[v${i}]`
       );
     } else {
       const color = item.card.background.slice(1).toUpperCase();
       filterChains.push(
-        `color=c=0x${color}:s=${cardFrame!.width}x${cardFrame!.height}:r=${frameRate}:d=${item.card.duration.toFixed(3)},${CARD_VIDEO_FORMAT}${pad}[v${i}]`
+        `color=c=0x${color}:s=${cardFrame!.width}x${cardFrame!.height}:r=${frameRate}:d=${lengths[i].toFixed(3)},${CARD_VIDEO_FORMAT}${fades}${pad}[v${i}]`
       );
     }
   });
@@ -421,15 +530,13 @@ export function buildRenderArgs(args: {
     // each pair is joined (this is the standard idiom for chaining more
     // than one xfade) -- verified against a real ffmpeg render, not just
     // the filter's documented options, since offset math like this is easy
-    // to get subtly wrong. The audio side uses the same crossfade lengths
-    // (see buildAudioEditChains).
-    const durations = items.map(itemDuration);
-    const crossfades = computeCrossfades(durations);
+    // to get subtly wrong. The audio side uses the same overlaps (see
+    // buildAudioEditChains), both from layoutProgram.
     let videoLabel = "v0";
-    let cumulativeDuration = durations[0];
+    let cumulativeDuration = lengths[0];
     for (let i = 1; i < items.length; i++) {
-      const segmentDuration = durations[i];
-      const crossfade = crossfades[i];
+      const segmentDuration = lengths[i];
+      const crossfade = overlaps[i];
       const offset = (cumulativeDuration - crossfade).toFixed(3);
       const nextVideoLabel = i === items.length - 1 ? "outv" : `vx${i}`;
       filterChains.push(
@@ -440,7 +547,7 @@ export function buildRenderArgs(args: {
     }
   }
 
-  filterChains.push(...buildAudioEditChains(items));
+  filterChains.push(...buildAudioEditChains(layout));
   let audioOutLabel = "[outa]";
   if (audioFilter) {
     filterChains.push(`[outa]${audioFilter}[cleana]`);
