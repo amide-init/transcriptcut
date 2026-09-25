@@ -144,4 +144,19 @@ describe("editOperationSchema", () => {
       expect(editOperationSchema.safeParse({ ...transition, duration: 5 }).success).toBe(false);
     });
   });
+
+  describe("overlay", () => {
+    const overlay = { id: "o1", type: "overlay", assetId: "cmabc123", start: 10, end: 15, mode: "pip", corner: "top-right", createdAt: 0 };
+
+    it("accepts full-screen and picture-in-picture B-roll", () => {
+      expect(editOperationSchema.safeParse(overlay).success).toBe(true);
+      expect(editOperationSchema.safeParse({ ...overlay, mode: "full", corner: undefined, offset: 2.5 }).success).toBe(true);
+    });
+
+    it("rejects unknown modes and corners, and asset ids that aren't plain ids", () => {
+      expect(editOperationSchema.safeParse({ ...overlay, mode: "split" }).success).toBe(false);
+      expect(editOperationSchema.safeParse({ ...overlay, corner: "middle" }).success).toBe(false);
+      expect(editOperationSchema.safeParse({ ...overlay, assetId: "../../etc/passwd" }).success).toBe(false);
+    });
+  });
 });
