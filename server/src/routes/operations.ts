@@ -25,9 +25,13 @@ operationsRoute.post("/:id/operations", async (c) => {
     return errorResponse(c, "INVALID_OPERATION", "end must be after start.", 400);
   }
 
-  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true } });
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true, duration: true } });
   if (!project) {
     return errorResponse(c, "NOT_FOUND", "Project not found.", 404);
+  }
+  // A split at 0 only names the first scene; one at or past the end would make an empty scene.
+  if (op.type === "split" && project.duration && op.timestamp >= project.duration) {
+    return errorResponse(c, "INVALID_OPERATION", "Split must fall inside the video.", 400);
   }
 
   // Client generates the id (needed so undo/redo can address the exact row);

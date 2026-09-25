@@ -15,6 +15,7 @@ export const editOperationSchema = z.discriminatedUnion("type", [
     end: z.number().nonnegative(),
     reason: z.string().max(500).optional(),
     createdAt: z.number(),
+    groupId: z.string().min(1).max(100).optional(),
   }),
   z.object({
     id: z.string().min(1),
@@ -22,12 +23,16 @@ export const editOperationSchema = z.discriminatedUnion("type", [
     start: z.number().nonnegative(),
     end: z.number().nonnegative(),
     createdAt: z.number(),
+    groupId: z.string().min(1).max(100).optional(),
   }),
   z.object({
     id: z.string().min(1),
     type: z.literal("split"),
     timestamp: z.number().nonnegative(),
+    title: z.string().trim().max(80).optional(),
+    source: z.enum(["manual", "ai", "shot"]).optional(),
     createdAt: z.number(),
+    groupId: z.string().min(1).max(100).optional(),
   }),
   z.object({
     id: z.string().min(1),
@@ -36,5 +41,6 @@ export const editOperationSchema = z.discriminatedUnion("type", [
     start: z.number().nonnegative(),
     end: z.number().nonnegative(),
     createdAt: z.number(),
+    groupId: z.string().min(1).max(100).optional(),
   }),
 ]);
