@@ -661,6 +661,19 @@ characters. The preview can't insert frames into a `<video>`, so
 `CardPreview` (same layout percentages, `lib/cards/layout.ts`) on its own
 clock, then resumes.
 
+A `transition` operation styles the join into the scene starting at its
+`at` (both joins around that scene's card, if it has one): dip to black,
+dip to white, or crossfade (only with a card -- between two stretches of
+footage that follow each other in the source it shows nothing, so it
+falls back to a cut). At 0 it fades the episode in, at the end it fades
+it out. **Transitions never change the program's length**, so captions
+and chapters need no adjusting: a dip fades each side's own edge
+(`fade`/`afade`, audio capped at 0.3s next to speech) and keeps the
+usual join, and a crossfade's overlap is added to the card's rendered
+length (`plan.ts#layoutProgram`). The preview draws them with
+`TransitionOverlay` from the pure `transition-look.ts`, on its own
+animation-frame loop; audio fades aren't previewed.
+
 **ffmpeg 9 xfade gotchas** (`plan.ts`, measured on 9.0.2): every segment
 must be pinned to the source's frame rate with `fps=` (without it xfade
 drops the start of each later segment), must not get a `settb` after
