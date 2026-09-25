@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
-import { Merge, Play, RotateCcw, Scissors, Trash2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Merge, Play, RotateCcw, Scissors, Trash2, Type } from "lucide-react";
 import { usePlayerStore } from "@/stores/player-store";
 import { useTimelineStore } from "@/stores/timeline-store";
 import { useScenes } from "@/lib/timeline/useScenes";
@@ -9,13 +9,18 @@ import { sceneAt, sceneColor, type Scene } from "@/lib/timeline/scenes";
 import { cutsOverlapping } from "@/lib/timeline/cuts";
 import { formatTimecode } from "@/lib/timeline/format";
 import { Button } from "@/components/ui/button";
-import type { CutOperation } from "@/types/edit-operation";
+import { CardEditor } from "@/components/editor/CardEditor";
+import { CARD_BACKGROUNDS } from "@/lib/cards/layout";
+import type { CardOperation, CardTemplate, CutOperation } from "@/types/edit-operation";
+
+/** A card at a scene's start (within this) belongs to that scene. */
+const CARD_MATCH_SECONDS = 0.05;
 
 /**
  * Lists the episode's scenes -- stretches between split points -- so you
  * can name them, jump to them, drop a whole scene, or merge it back into
- * the one before. Everything here is ordinary edit operations (splits and
- * cuts), so it all goes through undo/redo.
+ * the one before, and give it a title card. Everything here is ordinary
+ * edit operations (splits, cuts, cards), so it all goes through undo/redo.
  */
 export function ScenesPanel() {
   const currentTime = usePlayerStore((s) => s.currentTime);
@@ -25,10 +30,67 @@ export function ScenesPanel() {
   const addCut = useTimelineStore((s) => s.addCut);
   const replaceOperation = useTimelineStore((s) => s.replaceOperation);
   const removeOperations = useTimelineStore((s) => s.removeOperations);
+  const addOperations = useTimelineStore((s) => s.addOperations);
+  const duration = usePlayerStore((s) => s.duration);
+  const setCard = usePlayerStore((s) => s.setCard);
   const { scenes, splitAt } = useScenes();
+  const [editingCardId, setEditingCardId] = useState<string | null>(null);
 
   const cuts = useMemo(() => operations.filter((op): op is CutOperation => op.type === "cut"), [operations]);
+  const cards = useMemo(
+    () =>
+      operations
+        .filter((op): op is CardOperation => op.type === "card")
+        .sort((a, b) => a.createdAt - b.createdAt),
+    [operations]
+  );
+  const cardsAt = (at: number) => cards.filter((c) => Math.abs(c.at - at) <= CARD_MATCH_SECONDS);
+  const outroCards = cards.filter((c) => c.at >= duration - CARD_MATCH_SECONDS);
   const activeScene = sceneAt(scenes, currentTime);
+
+  const addCard = (at: number, template: CardTemplate, title: string) => {
+    const card: CardOperation = {
+      id: crypto.randomUUID(),
+      type: "card",
+      at,
+      duration: 3,
+      template,
+      title,
+      background: CARD_BACKGROUNDS[0],
+      createdAt: Date.now(),
+    };
+    addOperations([card]);
+    setCard(null);
+    setEditingCardId(card.id);
+  };
+
+  const cardList = (list: CardOperation[]) =>
+    list.map((card) =>
+      editingCardId === card.id ? (
+        <CardEditor
+          key={card.id}
+          card={card}
+          onSave={(next) => replaceOperation(card.id, { ...next, id: crypto.randomUUID() })}
+          onDelete={() => {
+            removeOperations([card.id]);
+            setEditingCardId(null);
+          }}
+          onClose={() => setEditingCardId(null)}
+        />
+      ) : (
+        <button
+          key={card.id}
+          type="button"
+          onClick={() => setEditingCardId(card.id)}
+          className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-left hover:bg-muted/60"
+          title="Edit title card"
+        >
+          <span className="size-3.5 shrink-0 rounded-sm border border-border" style={{ backgroundColor: card.background }} />
+          <span className="min-w-0 flex-1 truncate">{card.title}</span>
+          <span className="font-mono text-muted-foreground tabular-nums">{card.duration}s</span>
+        </button>
+      )
+    );
 
   const rename = (scene: Scene, title: string) => {
     const split = operations.find((op) => op.id === scene.splitId);
@@ -54,12 +116,13 @@ export function ScenesPanel() {
         </p>
       </div>
 
-      {scenes.length <= 1 ? (
+      {scenes.length <= 1 && (
         <p className="rounded-lg border border-dashed border-border p-3 text-muted-foreground">
-          The whole episode is one scene. Split it at each topic change to name sections and drop whole segments at
-          once.
+          The whole episode is one scene. Split it at each topic change to name sections, drop whole segments at once,
+          and open each one with a title card.
         </p>
-      ) : (
+      )}
+      {scenes.length > 0 && (
         <ol className="flex flex-col gap-1.5">
           {scenes.map((scene) => {
             const kept = scene.editedEnd - scene.editedStart;
@@ -106,6 +169,16 @@ export function ScenesPanel() {
                     {partlyCut && <span className="text-destructive/80"> (trimmed)</span>}
                   </span>
                   <span className="flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      onClick={() =>
+                        addCard(scene.index === 0 ? 0 : scene.start, scene.index === 0 ? "title" : "chapter", scene.title)
+                      }
+                      title={scene.index === 0 ? "Add an intro card" : "Add a title card before this scene"}
+                    >
+                      <Type className="size-3" />
+                    </Button>
                     {scene.index > 0 && scene.splitId && (
                       <Button
                         variant="ghost"
@@ -134,10 +207,26 @@ export function ScenesPanel() {
                     )}
                   </span>
                 </div>
+                {cardsAt(scene.index === 0 ? 0 : scene.start).length > 0 && (
+                  <div className="flex flex-col gap-1 pl-3.5">{cardList(cardsAt(scene.index === 0 ? 0 : scene.start))}</div>
+                )}
               </li>
             );
           })}
         </ol>
+      )}
+
+      {duration > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">Outro</span>
+            <Button variant="ghost" size="xs" onClick={() => addCard(duration, "outro", "Thanks for listening")}>
+              <Type className="size-3" />
+              Add outro card
+            </Button>
+          </div>
+          {cardList(outroCards)}
+        </div>
       )}
     </div>
   );

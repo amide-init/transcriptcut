@@ -97,4 +97,35 @@ describe("editOperationSchema", () => {
     expect(editOperationSchema.safeParse({ ...base, title: "x".repeat(81) }).success).toBe(false);
     expect(editOperationSchema.safeParse({ ...base, source: "robot" }).success).toBe(false);
   });
+
+  describe("card", () => {
+    const card = {
+      id: "c1",
+      type: "card",
+      at: 30,
+      duration: 3,
+      template: "chapter",
+      title: "Part 2: Pricing",
+      subtitle: "What it really costs",
+      background: "#101820",
+      createdAt: 0,
+    };
+
+    it("accepts a valid card", () => {
+      expect(editOperationSchema.safeParse(card).success).toBe(true);
+    });
+
+    it("rejects out-of-range durations, unknown templates and bad colors", () => {
+      expect(editOperationSchema.safeParse({ ...card, duration: 0.5 }).success).toBe(false);
+      expect(editOperationSchema.safeParse({ ...card, duration: 11 }).success).toBe(false);
+      expect(editOperationSchema.safeParse({ ...card, template: "spinning" }).success).toBe(false);
+      expect(editOperationSchema.safeParse({ ...card, background: "red" }).success).toBe(false);
+    });
+
+    it("rejects an empty title and text that would be read as ASS override tags", () => {
+      expect(editOperationSchema.safeParse({ ...card, title: "   " }).success).toBe(false);
+      expect(editOperationSchema.safeParse({ ...card, title: "{\\fs200}Big" }).success).toBe(false);
+      expect(editOperationSchema.safeParse({ ...card, subtitle: "two\nlines" }).success).toBe(false);
+    });
+  });
 });

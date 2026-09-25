@@ -634,6 +634,40 @@ it; `plan.ts` then crops/scales to the clip frame, and captions are
 re-cut into 3-4 word Shorts cues laid out for that frame (the ASS script
 resolution must match the output aspect, or libass stretches glyphs).
 
+## Scenes and title cards
+
+Scenes are derived, never stored: the ranges between `split` operations
+(`lib/timeline/scenes.ts`); a split at exactly 0 only names the first
+scene. New splits snap to the middle of a gap between words.
+
+A `card` operation inserts a full-screen title card (template, title,
+subtitle, 1-10s, solid color) before the content at its source time `at`
+-- a scene start, 0 for an intro, the duration for an outro. Cards add
+time that isn't in the source, so there are three clocks: source, edited
+(cuts removed, `cuts.ts`) and **program** (edited plus cards,
+`lib/timeline/program.ts`, duplicated client/server). Code that already
+works in edited time (captions, chapters, transcript export) shifts into
+program time through `editedToProgramTime`, so cuts and cards compose
+without knowing about each other. A card whose whole scene is cut is
+dropped with it. Clips skip cards.
+
+Rendering: each card is an ffmpeg `color` source at the source's size and
+frame rate, joined with the same xfade chain as cuts; all card text is
+one generated `.ass` file (`lib/cards/ass.ts`) burned in over the program
+before captions and the logo. User text only ever reaches ffmpeg inside
+that file, and the API refuses braces, backslashes and control
+characters. The preview can't insert frames into a `<video>`, so
+`useCardPlayback.ts` pauses the video where a card plays, shows
+`CardPreview` (same layout percentages, `lib/cards/layout.ts`) on its own
+clock, then resumes.
+
+**ffmpeg 9 xfade gotchas** (`plan.ts`, measured on 9.0.2): every segment
+must be pinned to the source's frame rate with `fps=` (without it xfade
+drops the start of each later segment), must not get a `settb` after
+that (brings the bug back), and every segment but the last is padded
+with `tpad` clone frames (a segment a frame short of its computed length
+otherwise ends the whole chain at that join).
+
 ---
 
 # 13. Architecture (local-first)

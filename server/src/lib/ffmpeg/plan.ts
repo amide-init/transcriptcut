@@ -1,4 +1,5 @@
 import type { PlayableRange } from "@/types/timeline";
+import type { ProgramItem } from "@/lib/timeline/program";
 import { getFfmpegFilter } from "@/lib/ffmpeg/filters";
 import { buildPropertiesFilter } from "@/lib/ffmpeg/properties";
 import { buildForceStyle, type CaptionStyle } from "@/lib/captions/style";
@@ -79,33 +80,85 @@ function assertValidRanges(playableRanges: PlayableRange[]): void {
 }
 
 /**
+ * What to render, in order: the program (lib/timeline/program.ts) when the
+ * project has title cards, otherwise just the playable ranges. Validated
+ * here since card durations and colors end up in the filtergraph.
+ */
+function resolveItems(playableRanges: PlayableRange[], program?: ProgramItem[]): ProgramItem[] {
+  if (!program) {
+    assertValidRanges(playableRanges);
+    return playableRanges.map((r) => ({ kind: "source", start: r.start, end: r.end }));
+  }
+  assertValidRanges(program.flatMap((item) => (item.kind === "source" ? [item] : [])));
+  for (const item of program) {
+    if (item.kind !== "card") continue;
+    const { duration, background } = item.card;
+    if (!Number.isFinite(duration) || duration <= 0 || duration > 60) throw new Error("Invalid card duration.");
+    if (!/^#[0-9a-fA-F]{6}$/.test(background)) throw new Error("Invalid card background color.");
+  }
+  return program;
+}
+
+function assertValidCardFrame(frame: { width: number; height: number }): void {
+  const { width, height } = frame;
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0 || width > 8192 || height > 8192) {
+    throw new Error(`Invalid card frame size: ${width}x${height}`);
+  }
+}
+
+function itemDuration(item: ProgramItem): number {
+  return item.kind === "card" ? item.card.duration : item.end - item.start;
+}
+
+const hasCards = (items: ProgramItem[]) => items.some((item) => item.kind === "card");
+
+/**
+ * Cards join the source through xfade/acrossfade, which need identical
+ * frame size, rate, pixel format and timebase (video) and sample format,
+ * rate and layout (audio) on both sides. A generated color source never
+ * matches a decoded file on its own, so when cards are present every
+ * segment is normalized to these. Without cards the graph is left exactly
+ * as it always was.
+ */
+const CARD_AUDIO_FORMAT = "aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo";
+/**
+ * The rate comes from fps= (sources) and the color source's own r= (cards),
+ * which also gives both the same 1/rate timebase. Don't add settb here:
+ * measured on ffmpeg 9, forcing another timebase after fps= brings back
+ * the dropped-footage join the fps= fix exists for.
+ */
+const CARD_VIDEO_FORMAT = "format=yuv420p,setsar=1";
+
+/**
  * Crossfade length at each join: entry i is the fade between range i-1 and
  * range i (entry 0 is unused). Each is clamped to at most half of either
  * adjacent segment's own (pre-join) length, so a short surviving sliver
  * between two nearby cuts can't make the transition eat more than that
  * sliver. Shared by the video and audio graphs so they stay in sync.
  */
-function computeCrossfades(playableRanges: PlayableRange[]): number[] {
-  return playableRanges.map((r, i) => {
-    if (i === 0) return 0;
-    const previous = playableRanges[i - 1];
-    return Math.min(CUT_CROSSFADE_SECONDS, (previous.end - previous.start) / 2, (r.end - r.start) / 2);
-  });
+function computeCrossfades(durations: number[]): number[] {
+  return durations.map((d, i) => (i === 0 ? 0 : Math.min(CUT_CROSSFADE_SECONDS, durations[i - 1] / 2, d / 2)));
 }
 
-/** atrim + acrossfade chains ending in [outa]: the edited program's audio, before any cleanup. */
-function buildAudioEditChains(playableRanges: PlayableRange[]): string[] {
-  const chains = playableRanges.map(
-    (r, i) => `[0:a]atrim=start=${r.start.toFixed(3)}:end=${r.end.toFixed(3)},asetpts=PTS-STARTPTS[a${i}]`
+/**
+ * atrim + acrossfade chains ending in [outa]: the edited program's audio,
+ * before any cleanup. Cards contribute silence for their duration.
+ */
+function buildAudioEditChains(items: ProgramItem[]): string[] {
+  const normalize = hasCards(items) ? `,${CARD_AUDIO_FORMAT}` : "";
+  const chains = items.map((item, i) =>
+    item.kind === "source"
+      ? `[0:a]atrim=start=${item.start.toFixed(3)}:end=${item.end.toFixed(3)},asetpts=PTS-STARTPTS${normalize}[a${i}]`
+      : `anullsrc=r=48000:cl=stereo,atrim=duration=${item.card.duration.toFixed(3)}${normalize}[a${i}]`
   );
-  if (playableRanges.length === 1) {
+  if (items.length === 1) {
     chains.push("[a0]anull[outa]");
     return chains;
   }
-  const crossfades = computeCrossfades(playableRanges);
+  const crossfades = computeCrossfades(items.map(itemDuration));
   let label = "a0";
-  for (let i = 1; i < playableRanges.length; i++) {
-    const next = i === playableRanges.length - 1 ? "outa" : `ax${i}`;
+  for (let i = 1; i < items.length; i++) {
+    const next = i === items.length - 1 ? "outa" : `ax${i}`;
     chains.push(`[${label}][a${i}]acrossfade=d=${crossfades[i].toFixed(3)}[${next}]`);
     label = next;
   }
@@ -121,11 +174,13 @@ function buildAudioEditChains(playableRanges: PlayableRange[]): string[] {
 export function buildLoudnessAnalysisArgs(args: {
   inputPath: string;
   playableRanges: PlayableRange[];
+  /** With title cards: the program, whose cards add silence (see resolveItems). */
+  program?: ProgramItem[];
   /** From audio-filters.ts#buildLoudnessAnalysisChain. */
   analysisChain: string;
 }): string[] {
-  assertValidRanges(args.playableRanges);
-  const chains = [...buildAudioEditChains(args.playableRanges), `[outa]${args.analysisChain}[analysis]`];
+  const items = resolveItems(args.playableRanges, args.program);
+  const chains = [...buildAudioEditChains(items), `[outa]${args.analysisChain}[analysis]`];
   return ["-i", args.inputPath, "-filter_complex", chains.join(";"), "-map", "[analysis]", "-f", "null", "-"];
 }
 
@@ -152,13 +207,15 @@ export function buildAudioOnlyRenderArgs(args: {
   inputPath: string;
   outputPath: string;
   playableRanges: PlayableRange[];
+  /** With title cards: the program, so cards become silence and chapters stay in sync. */
+  program?: ProgramItem[];
   audioFilter?: string | null;
   format?: "m4a" | "mp3" | "wav";
   metadataPath?: string;
 }): string[] {
-  assertValidRanges(args.playableRanges);
+  const items = resolveItems(args.playableRanges, args.program);
   const format = args.format ?? "m4a";
-  const chains = buildAudioEditChains(args.playableRanges);
+  const chains = buildAudioEditChains(items);
   let label = "[outa]";
   if (args.audioFilter) {
     chains.push(`[outa]${args.audioFilter}[cleana]`);
@@ -272,6 +329,14 @@ export function buildRenderArgs(args: {
    * xfade joins -- see the comment where it's applied.
    */
   frameRate: string;
+  /**
+   * The program with title cards (lib/timeline/program.ts), plus what the
+   * card segments need to match the source: its frame size and the .ass
+   * file with every card's text (lib/cards/ass.ts). Omit for a project
+   * without cards.
+   */
+  program?: ProgramItem[];
+  cardFrame?: { width: number; height: number; textPath: string };
 }): string[] {
   const {
     inputPath,
@@ -292,10 +357,19 @@ export function buildRenderArgs(args: {
     metadataPath,
     reframe,
     frameRate,
+    program,
+    cardFrame,
   } = args;
 
-  assertValidRanges(playableRanges);
+  const items = resolveItems(playableRanges, program);
   if (!/^\d{1,6}(\/\d{1,6})?$/.test(frameRate)) throw new Error(`Invalid frame rate: ${frameRate}`);
+  const withCards = hasCards(items);
+  if (withCards && !cardFrame) throw new Error("Title cards need the source's frame size.");
+  if (cardFrame) assertValidCardFrame(cardFrame);
+
+  const presetFilter = getFfmpegFilter(filterId);
+  const propertiesFilter = properties ? buildPropertiesFilter(properties) : null;
+  const colorFilter = [presetFilter, propertiesFilter].filter(Boolean).join(",");
 
   // fps= pins each trimmed segment to the source's frame rate. Without it,
   // xfade on ffmpeg 9 drops the start of every segment after a join: the
@@ -313,14 +387,32 @@ export function buildRenderArgs(args: {
   // 14.9s, the last segment gone). xfade discards the first input's frames
   // after the transition, so the padding never reaches the output.
   const filterChains: string[] = [];
-  playableRanges.forEach((r, i) => {
-    const pad = i < playableRanges.length - 1 ? `,${SEGMENT_TAIL_PAD}` : "";
-    filterChains.push(
-      `[0:v]trim=start=${r.start.toFixed(3)}:end=${r.end.toFixed(3)},setpts=PTS-STARTPTS,fps=${frameRate}${pad}[v${i}]`
-    );
+  items.forEach((item, i) => {
+    const pad = i < items.length - 1 ? `,${SEGMENT_TAIL_PAD}` : "";
+    if (!withCards) {
+      const r = item as Extract<ProgramItem, { kind: "source" }>;
+      filterChains.push(
+        `[0:v]trim=start=${r.start.toFixed(3)}:end=${r.end.toFixed(3)},setpts=PTS-STARTPTS,fps=${frameRate}${pad}[v${i}]`
+      );
+      return;
+    }
+    // With cards, color grading is applied per source segment so the cards
+    // keep their exact chosen color (a black-and-white preset shouldn't
+    // turn a blue card grey).
+    if (item.kind === "source") {
+      const grade = colorFilter ? `,${colorFilter}` : "";
+      filterChains.push(
+        `[0:v]trim=start=${item.start.toFixed(3)}:end=${item.end.toFixed(3)},setpts=PTS-STARTPTS${grade},fps=${frameRate},${CARD_VIDEO_FORMAT}${pad}[v${i}]`
+      );
+    } else {
+      const color = item.card.background.slice(1).toUpperCase();
+      filterChains.push(
+        `color=c=0x${color}:s=${cardFrame!.width}x${cardFrame!.height}:r=${frameRate}:d=${item.card.duration.toFixed(3)},${CARD_VIDEO_FORMAT}${pad}[v${i}]`
+      );
+    }
   });
 
-  if (playableRanges.length === 1) {
+  if (items.length === 1) {
     filterChains.push(`[v0]null[outv]`);
   } else {
     // Chain xfade pairwise across every cut instead of a plain concat.
@@ -331,14 +423,15 @@ export function buildRenderArgs(args: {
     // the filter's documented options, since offset math like this is easy
     // to get subtly wrong. The audio side uses the same crossfade lengths
     // (see buildAudioEditChains).
-    const crossfades = computeCrossfades(playableRanges);
+    const durations = items.map(itemDuration);
+    const crossfades = computeCrossfades(durations);
     let videoLabel = "v0";
-    let cumulativeDuration = playableRanges[0].end - playableRanges[0].start;
-    for (let i = 1; i < playableRanges.length; i++) {
-      const segmentDuration = playableRanges[i].end - playableRanges[i].start;
+    let cumulativeDuration = durations[0];
+    for (let i = 1; i < items.length; i++) {
+      const segmentDuration = durations[i];
       const crossfade = crossfades[i];
       const offset = (cumulativeDuration - crossfade).toFixed(3);
-      const nextVideoLabel = i === playableRanges.length - 1 ? "outv" : `vx${i}`;
+      const nextVideoLabel = i === items.length - 1 ? "outv" : `vx${i}`;
       filterChains.push(
         `[${videoLabel}][v${i}]xfade=transition=fade:duration=${crossfade.toFixed(3)}:offset=${offset}[${nextVideoLabel}]`
       );
@@ -347,7 +440,7 @@ export function buildRenderArgs(args: {
     }
   }
 
-  filterChains.push(...buildAudioEditChains(playableRanges));
+  filterChains.push(...buildAudioEditChains(items));
   let audioOutLabel = "[outa]";
   if (audioFilter) {
     filterChains.push(`[outa]${audioFilter}[cleana]`);
@@ -355,10 +448,7 @@ export function buildRenderArgs(args: {
   }
 
   let videoOutLabel = "[outv]";
-  const presetFilter = getFfmpegFilter(filterId);
-  const propertiesFilter = properties ? buildPropertiesFilter(properties) : null;
-  const colorFilter = [presetFilter, propertiesFilter].filter(Boolean).join(",");
-  if (colorFilter) {
+  if (colorFilter && !withCards) {
     filterChains.push(`[outv]${colorFilter}[filtered]`);
     videoOutLabel = "[filtered]";
   }
@@ -366,6 +456,12 @@ export function buildRenderArgs(args: {
   if (reframe) {
     filterChains.push(`${videoOutLabel}${buildReframeFilter(reframe)}[reframed]`);
     videoOutLabel = "[reframed]";
+  }
+
+  // Card text sits above the footage and below captions and the logo.
+  if (withCards) {
+    filterChains.push(`${videoOutLabel}subtitles=filename='${escapeSubtitlesPath(cardFrame!.textPath)}'[carded]`);
+    videoOutLabel = "[carded]";
   }
 
   if (srtPath) {

@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db/client";
 import { resolveInDataDir, statAsset } from "@/lib/storage/local";
 import { computePlayableRanges } from "@/lib/timeline/cuts";
 import { buildAudioOnlyRenderArgs, buildLoudnessAnalysisArgs, buildRenderArgs } from "@/lib/ffmpeg/plan";
-import { resolveChapters, toFfmetadata } from "@/lib/publishing/chapters";
+import { resolveProgramChapters, toFfmetadata } from "@/lib/publishing/chapters";
 import { clipAsCuts } from "@/lib/clips/clips";
 import { captionStyleSchema } from "@/lib/validation/caption-style";
 import { CLIP_ASPECTS, CLIP_OUTPUT_SIZE, type ClipAspect } from "@/types/clips";
@@ -23,6 +23,17 @@ import {
 import { parseStoredAudioSettings } from "@/lib/validation/audio-settings";
 import { runFfmpeg, runFfmpegCapturingStderr } from "@/lib/ffmpeg/run";
 import { probeVideoStream } from "@/lib/ffmpeg/probe";
+import {
+  buildProgramItems,
+  cardStartTimes,
+  cardsDuration,
+  editedRangeToProgram,
+  placeCards,
+  type CardSlot,
+  type ProgramItem,
+} from "@/lib/timeline/program";
+import { toCardsAss } from "@/lib/cards/ass";
+import type { CaptionCue } from "@/lib/captions/generate";
 import { generateCaptions, splitCuesForShorts } from "@/lib/captions/generate";
 import { toAssKaraoke, toSrt } from "@/lib/captions/format";
 import { DEFAULT_CAPTION_STYLE, type CaptionStyle } from "@/lib/captions/style";
@@ -63,7 +74,8 @@ export async function resolveLoudnessGain(
   inputPath: string,
   playableRanges: PlayableRange[],
   audioSettings: AudioSettings,
-  jobId: string
+  jobId: string,
+  program?: ProgramItem[]
 ): Promise<number | undefined> {
   const target = loudnessTargetLufs(audioSettings);
   if (target === null) return undefined;
@@ -71,7 +83,7 @@ export async function resolveLoudnessGain(
   const measure = async (gainDb?: number) => {
     const analysisChain = buildLoudnessAnalysisChain(audioSettings, gainDb)!;
     const stderr = await runFfmpegCapturingStderr(
-      buildLoudnessAnalysisArgs({ inputPath, playableRanges, analysisChain })
+      buildLoudnessAnalysisArgs({ inputPath, playableRanges, program, analysisChain })
     );
     return parseMeasuredLoudness(stderr);
   };
@@ -125,6 +137,16 @@ function toClipAspect(value: string): ClipAspect {
   return (CLIP_ASPECTS as readonly string[]).includes(value) ? (value as ClipAspect) : "9:16";
 }
 
+/** Caption cues moved from edited time onto the program timeline, around any title cards. */
+function cuesToProgramTime(cues: CaptionCue[], slots: CardSlot[]): CaptionCue[] {
+  if (slots.length === 0) return cues;
+  return cues.map((cue) => ({
+    ...cue,
+    ...editedRangeToProgram(cue.start, cue.end, slots),
+    words: cue.words.map((w) => ({ ...w, ...editedRangeToProgram(w.start, w.end, slots) })),
+  }));
+}
+
 export const EXPORT_MIME_TYPES: Record<ExportFormat, string> = {
   mp4: "video/mp4",
   mp3: "audio/mpeg",
@@ -164,13 +186,15 @@ export async function runRenderJob(
 
     // A clip is rendered as the project with everything outside it cut too,
     // so the project's own edits still apply inside the clip.
+    const operations = project.editOperations.map((op) => JSON.parse(op.dataJson) as EditOperation);
     const cuts = [
-      ...project.editOperations
-        .map((op) => JSON.parse(op.dataJson) as EditOperation)
-        .filter((op): op is CutOperation => op.type === "cut"),
+      ...operations.filter((op): op is CutOperation => op.type === "cut"),
       ...(clip ? clipAsCuts(clip, project.duration) : []),
     ];
     const playableRanges = computePlayableRanges(project.duration, cuts);
+    // Title cards play in full exports only: a clip is a standalone excerpt.
+    const cardSlots = clip ? [] : placeCards(operations, playableRanges, project.duration);
+    const program = cardSlots.length > 0 ? buildProgramItems(playableRanges, cardSlots) : undefined;
 
     const inputPath = resolveInDataDir(originalAsset.filePath);
     const outputRelativePath = path.posix.join(
@@ -203,13 +227,21 @@ export async function runRenderJob(
     const sourceStream = isVideo ? await probeVideoStream(inputPath) : undefined;
     const videoDimensions = clipFrame ?? sourceStream;
 
+    // Title cards are generated at the source's own size so they join it seamlessly.
+    let cardFrame: { width: number; height: number; textPath: string } | undefined;
+    if (program && sourceStream) {
+      const textPath = resolveInDataDir(path.posix.join("projects", project.id, "render", `${jobId}.cards.ass`));
+      await writeFile(textPath, toCardsAss(cardStartTimes(program), sourceStream), "utf-8");
+      cardFrame = { width: sourceStream.width, height: sourceStream.height, textPath };
+    }
+
     if (burnInCaptions) {
       if (!project.transcript) throw new Error("Captions were requested but this project has no transcript.");
       const transcript: Transcript = {
         id: project.transcript.id,
         segments: JSON.parse(project.transcript.segmentsJson),
       };
-      const sentenceCues = generateCaptions(transcript, cuts, project.duration);
+      const sentenceCues = cuesToProgramTime(generateCaptions(transcript, cuts, project.duration), cardSlots);
       const cues = clip ? splitCuesForShorts(sentenceCues) : sentenceCues;
       const subtitleExt = useKaraoke ? "ass" : "srt";
       const subtitleRelativePath = path.posix.join("projects", project.id, "render", `${jobId}.${subtitleExt}`);
@@ -227,7 +259,7 @@ export async function runRenderJob(
     const audioSettings = parseStoredAudioSettings(project.audioSettingsJson);
     const audioFilter = buildAudioFilterChain(
       audioSettings,
-      await resolveLoudnessGain(inputPath, playableRanges, audioSettings, jobId)
+      await resolveLoudnessGain(inputPath, playableRanges, audioSettings, jobId, program)
     );
 
     // Episode title + chapter markers, embedded so podcast apps and players
@@ -242,7 +274,11 @@ export async function runRenderJob(
       metadataPath = resolveInDataDir(path.posix.join("projects", project.id, "render", `${jobId}.ffmeta`));
       await writeFile(
         metadataPath,
-        toFfmetadata(resolveChapters(chapters, playableRanges), getEditedDuration(playableRanges), project.name),
+        toFfmetadata(
+          resolveProgramChapters(chapters, playableRanges, cardSlots),
+          getEditedDuration(playableRanges) + cardsDuration(cardSlots),
+          project.name
+        ),
         "utf-8"
       );
     }
@@ -267,8 +303,10 @@ export async function runRenderJob(
           metadataPath,
           reframe: clip && clipFrame ? { ...clipFrame, cropX: clip.cropX } : undefined,
           frameRate: sourceStream!.fps,
+          program,
+          cardFrame,
         })
-      : buildAudioOnlyRenderArgs({ inputPath, outputPath, playableRanges, audioFilter, format, metadataPath });
+      : buildAudioOnlyRenderArgs({ inputPath, outputPath, playableRanges, program, audioFilter, format, metadataPath });
     await runFfmpeg(args);
 
     const stats = await statAsset(outputRelativePath);

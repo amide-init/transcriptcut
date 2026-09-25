@@ -44,14 +44,14 @@ export function toVtt(cues: CaptionCue[]): string {
   return `WEBVTT\n\n${body}`;
 }
 
-function assTimestamp(seconds: number): string {
+export function assTimestamp(seconds: number): string {
   const { h, m, s, ms } = splitTime(seconds);
   // ASS wants centiseconds (2 digits), not milliseconds (3).
   return `${h}:${pad(m)}:${pad(s)}.${pad(Math.floor(ms / 10))}`;
 }
 
 /** Strips characters that would break the {\...} override-tag syntax if they appeared in transcript text. */
-function escapeAssText(text: string): string {
+export function escapeAssText(text: string): string {
   return text.replace(/[{}\\]/g, "");
 }
 
