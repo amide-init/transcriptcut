@@ -3,11 +3,12 @@ import { usePlayerStore } from "@/stores/player-store";
 import { useTimelineStore } from "@/stores/timeline-store";
 import { computePlayableRanges, getEditedDuration, sourceTimeToEditedTime } from "@/lib/timeline/cuts";
 import {
-  buildProgramItems,
+  buildProgram,
   cardsDuration,
   editedToProgramTime,
-  placeCards,
   type CardSlot,
+  type Fade,
+  type Join,
   type ProgramItem,
 } from "@/lib/timeline/program";
 import type { CutOperation } from "@/types/edit-operation";
@@ -18,6 +19,10 @@ export type Program = {
   ranges: PlayableRange[];
   slots: CardSlot[];
   items: ProgramItem[];
+  /** How items[i] joins items[i + 1]. */
+  joins: Join[];
+  fadeIn: Fade | null;
+  fadeOut: Fade | null;
   editedDuration: number;
   /** Edited duration plus every card: what the export runs for. */
   duration: number;
@@ -31,15 +36,17 @@ export function useProgram(): Program {
   return useMemo(() => {
     const cuts = operations.filter((op): op is CutOperation => op.type === "cut");
     const ranges = computePlayableRanges(sourceDuration, cuts);
-    const slots = sourceDuration > 0 ? placeCards(operations, ranges, sourceDuration) : [];
+    const program =
+      sourceDuration > 0
+        ? buildProgram(operations, ranges, sourceDuration)
+        : { slots: [], items: [], joins: [], fadeIn: null, fadeOut: null };
     const editedDuration = getEditedDuration(ranges);
     return {
       cuts,
       ranges,
-      slots,
-      items: buildProgramItems(ranges, slots),
+      ...program,
       editedDuration,
-      duration: editedDuration + cardsDuration(slots),
+      duration: editedDuration + cardsDuration(program.slots),
     };
   }, [operations, sourceDuration]);
 }

@@ -128,4 +128,20 @@ describe("editOperationSchema", () => {
       expect(editOperationSchema.safeParse({ ...card, subtitle: "two\nlines" }).success).toBe(false);
     });
   });
+
+  describe("transition", () => {
+    const transition = { id: "t1", type: "transition", at: 30, kind: "dipBlack", duration: 1, createdAt: 0 };
+
+    it("accepts each kind", () => {
+      for (const kind of ["dipBlack", "dipWhite", "crossfade"]) {
+        expect(editOperationSchema.safeParse({ ...transition, kind }).success).toBe(true);
+      }
+    });
+
+    it("rejects unknown kinds and out-of-range durations", () => {
+      expect(editOperationSchema.safeParse({ ...transition, kind: "wipe" }).success).toBe(false);
+      expect(editOperationSchema.safeParse({ ...transition, duration: 0.1 }).success).toBe(false);
+      expect(editOperationSchema.safeParse({ ...transition, duration: 5 }).success).toBe(false);
+    });
+  });
 });

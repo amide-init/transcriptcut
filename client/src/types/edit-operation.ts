@@ -53,6 +53,19 @@ export type EditOperation =
       background: string;
     })
   | (OperationBase & {
+      /**
+       * How the scene starting at `at` is joined to what plays before it
+       * (its card, if it has one, included). At 0 it fades the episode in;
+       * at the source duration it fades the episode out. Transitions never
+       * change the program's length -- see lib/timeline/program.ts.
+       */
+      type: "transition";
+      at: number;
+      kind: TransitionKind;
+      /** Seconds for the whole transition (a dip spends half going out, half coming in). */
+      duration: number;
+    })
+  | (OperationBase & {
       type: "caption";
       text: string;
       start: number;
@@ -66,6 +79,17 @@ export const CARD_MAX_SECONDS = 10;
 export const CARD_TITLE_MAX = 80;
 export const CARD_SUBTITLE_MAX = 120;
 
+/**
+ * dipBlack/dipWhite fade out to a color and back in; crossfade blends
+ * straight into or out of a title card (it needs a card: blending two
+ * stretches of footage that follow each other in the source shows nothing).
+ */
+export const TRANSITION_KINDS = ["dipBlack", "dipWhite", "crossfade"] as const;
+export type TransitionKind = (typeof TRANSITION_KINDS)[number];
+export const TRANSITION_MIN_SECONDS = 0.2;
+export const TRANSITION_MAX_SECONDS = 2;
+
 export type CutOperation = Extract<EditOperation, { type: "cut" }>;
 export type SplitOperation = Extract<EditOperation, { type: "split" }>;
 export type CardOperation = Extract<EditOperation, { type: "card" }>;
+export type TransitionOperation = Extract<EditOperation, { type: "transition" }>;

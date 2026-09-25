@@ -354,11 +354,13 @@ describe("title cards", () => {
     background: "#1e3a5f",
     createdAt: 0,
   };
-  const program = [
+  const items = [
     { kind: "card" as const, card },
     { kind: "source" as const, start: 0, end: 10 },
     { kind: "source" as const, start: 20, end: 30 },
   ];
+  const cuts = [{ kind: "cut" as const }, { kind: "cut" as const }];
+  const program = { items, joins: cuts, fadeIn: null, fadeOut: null };
   const cardFrame = { width: 1920, height: 1080, textPath: "/data/cards.ass" };
   const graph = (extra: Partial<Parameters<typeof buildRenderArgs>[0]> = {}) => {
     const args = buildRenderArgs({ ...baseArgs, program, cardFrame, ...extra });
@@ -415,12 +417,108 @@ describe("title cards", () => {
     expect(() => buildRenderArgs({ ...baseArgs, program, cardFrame: { ...cardFrame, width: 0 } })).toThrow(
       /frame size/
     );
-    const badColor = [{ kind: "card" as const, card: { ...card, background: "red" } }, program[1]];
+    const badColor = { ...program, items: [{ kind: "card" as const, card: { ...card, background: "red" } }, items[1], items[2]] };
     expect(() => buildRenderArgs({ ...baseArgs, program: badColor, cardFrame })).toThrow(/background color/);
   });
 
   it("adds card silence to audio-only exports", () => {
     const args = buildAudioOnlyRenderArgs({ ...baseArgs, program, format: "mp3" });
     expect(args[args.indexOf("-filter_complex") + 1]).toContain("anullsrc=r=48000:cl=stereo,atrim=duration=3.000");
+  });
+});
+
+describe("transitions", () => {
+  const card = {
+    id: "c1",
+    type: "card" as const,
+    at: 10,
+    duration: 3,
+    template: "title" as const,
+    title: "Part 2",
+    background: "#111418",
+    createdAt: 0,
+  };
+  const footage = [
+    { kind: "source" as const, start: 0, end: 10 },
+    { kind: "source" as const, start: 10, end: 20 },
+  ];
+  const graphOf = (args: string[]) => args[args.indexOf("-filter_complex") + 1];
+
+  it("dips by fading each side's own edge, keeping the usual join and timing", () => {
+    const g = graphOf(
+      buildRenderArgs({
+        ...baseArgs,
+        program: { items: footage, joins: [{ kind: "dip", color: "white", seconds: 1 }], fadeIn: null, fadeOut: null },
+      })
+    );
+    expect(g).toContain("fps=30000/1001,fade=t=out:st=9.500:d=0.500:color=white,tpad=");
+    expect(g).toContain("fps=30000/1001,fade=t=in:st=0:d=0.500:color=white[v1]");
+    expect(g).toContain("[v0][v1]xfade=transition=fade:duration=0.030:offset=9.970[outv]");
+    expect(g).toContain("asetpts=PTS-STARTPTS,afade=t=out:st=9.700:d=0.300[a0]");
+    expect(g).toContain("asetpts=PTS-STARTPTS,afade=t=in:st=0:d=0.300[a1]");
+  });
+
+  it("crossfades into and out of a card by growing the card, so the footage keeps its timing", () => {
+    const g = graphOf(
+      buildRenderArgs({
+        ...baseArgs,
+        cardFrame: { width: 1920, height: 1080, textPath: "/data/cards.ass" },
+        program: {
+          items: [footage[0], { kind: "card" as const, card }, footage[1]],
+          joins: [
+            { kind: "crossfade", seconds: 0.8 },
+            { kind: "crossfade", seconds: 0.8 },
+          ],
+          fadeIn: null,
+          fadeOut: null,
+        },
+      })
+    );
+    // 3s card + 0.8s blended in on each side.
+    expect(g).toContain(":d=4.600,format=yuv420p,setsar=1,tpad=");
+    expect(g).toContain("[v0][v1]xfade=transition=fade:duration=0.800:offset=9.200[vx1]");
+    // The footage after the card starts 13s in, exactly as without the blend.
+    expect(g).toContain("[vx1][v2]xfade=transition=fade:duration=0.800:offset=13.000[outv]");
+    expect(g).toContain("anullsrc=r=48000:cl=stereo,atrim=duration=4.600");
+    expect(g).toContain("[a0][a1]acrossfade=d=0.800[ax1]");
+  });
+
+  it("fades the episode in from and out to a color", () => {
+    const g = graphOf(
+      buildRenderArgs({
+        ...baseArgs,
+        program: {
+          items: footage,
+          joins: [{ kind: "cut" }],
+          fadeIn: { color: "black", seconds: 1.5 },
+          fadeOut: { color: "black", seconds: 2 },
+        },
+      })
+    );
+    expect(g).toContain("fade=t=in:st=0:d=1.500:color=black");
+    expect(g).toContain("fade=t=out:st=8.000:d=2.000:color=black[v1]");
+    expect(g).toContain("afade=t=in:st=0:d=1.000");
+    expect(g).toContain("afade=t=out:st=9.000:d=1.000[a1]");
+  });
+
+  it("never lets a transition take more than half of a short segment", () => {
+    const g = graphOf(
+      buildRenderArgs({
+        ...baseArgs,
+        program: {
+          items: [{ kind: "source" as const, start: 0, end: 0.6 }, footage[1]],
+          joins: [{ kind: "dip", color: "black", seconds: 2 }],
+          fadeIn: null,
+          fadeOut: null,
+        },
+      })
+    );
+    expect(g).toContain("fade=t=out:st=0.300:d=0.300:color=black");
+  });
+
+  it("refuses a program whose joins don't match its items", () => {
+    expect(() =>
+      buildRenderArgs({ ...baseArgs, program: { items: footage, joins: [], fadeIn: null, fadeOut: null } })
+    ).toThrow(/joins/);
   });
 });

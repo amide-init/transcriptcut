@@ -37,6 +37,9 @@ operationsRoute.post("/:id/operations", async (c) => {
   if (op.type === "card" && project.duration && op.at > project.duration) {
     return errorResponse(c, "INVALID_OPERATION", "Card must be placed inside the video.", 400);
   }
+  if (op.type === "transition" && project.duration && op.at > project.duration) {
+    return errorResponse(c, "INVALID_OPERATION", "Transition must be placed inside the video.", 400);
+  }
 
   // Client generates the id (needed so undo/redo can address the exact row);
   // upsert so a redo that restores a previously-undone op is idempotent.

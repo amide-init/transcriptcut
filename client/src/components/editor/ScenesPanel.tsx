@@ -10,8 +10,9 @@ import { cutsOverlapping } from "@/lib/timeline/cuts";
 import { formatTimecode } from "@/lib/timeline/format";
 import { Button } from "@/components/ui/button";
 import { CardEditor } from "@/components/editor/CardEditor";
+import { TransitionPicker } from "@/components/editor/TransitionPicker";
 import { CARD_BACKGROUNDS } from "@/lib/cards/layout";
-import type { CardOperation, CardTemplate, CutOperation } from "@/types/edit-operation";
+import type { CardOperation, CardTemplate, CutOperation, TransitionOperation } from "@/types/edit-operation";
 
 /** A card at a scene's start (within this) belongs to that scene. */
 const CARD_MATCH_SECONDS = 0.05;
@@ -45,6 +46,15 @@ export function ScenesPanel() {
     [operations]
   );
   const cardsAt = (at: number) => cards.filter((c) => Math.abs(c.at - at) <= CARD_MATCH_SECONDS);
+  const transitions = useMemo(
+    () =>
+      operations
+        .filter((op): op is TransitionOperation => op.type === "transition")
+        .sort((a, b) => a.createdAt - b.createdAt),
+    [operations]
+  );
+  /** The transition in effect at a moment: the latest one there. */
+  const transitionAt = (at: number) => transitions.filter((t) => Math.abs(t.at - at) <= CARD_MATCH_SECONDS).at(-1);
   const outroCards = cards.filter((c) => c.at >= duration - CARD_MATCH_SECONDS);
   const activeScene = sceneAt(scenes, currentTime);
 
@@ -210,6 +220,18 @@ export function ScenesPanel() {
                 {cardsAt(scene.index === 0 ? 0 : scene.start).length > 0 && (
                   <div className="flex flex-col gap-1 pl-3.5">{cardList(cardsAt(scene.index === 0 ? 0 : scene.start))}</div>
                 )}
+                <div className="pl-3.5">
+                  {scene.index === 0 ? (
+                    <TransitionPicker label="Fade in" at={0} edge="in" current={transitionAt(0)} />
+                  ) : (
+                    <TransitionPicker
+                      label="Transition in"
+                      at={scene.start}
+                      current={transitionAt(scene.start)}
+                      canCrossfade={cardsAt(scene.start).length > 0}
+                    />
+                  )}
+                </div>
               </li>
             );
           })}
@@ -226,6 +248,7 @@ export function ScenesPanel() {
             </Button>
           </div>
           {cardList(outroCards)}
+          <TransitionPicker label="Fade out" at={duration} edge="out" current={transitionAt(duration)} />
         </div>
       )}
     </div>

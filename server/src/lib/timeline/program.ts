@@ -1,4 +1,4 @@
-import type { CardOperation, EditOperation, SplitOperation } from "@/types/edit-operation";
+import type { CardOperation, EditOperation, SplitOperation, TransitionOperation } from "@/types/edit-operation";
 import type { PlayableRange } from "@/types/timeline";
 import { nextPlayableTime, sourceTimeToEditedTime } from "@/lib/timeline/cuts";
 
@@ -126,27 +126,38 @@ export function locateProgramTime(
 
 /**
  * The render's play order: source ranges, split wherever a card is
- * inserted, with the cards in between. With no cards this is exactly the
- * playable ranges.
+ * inserted (and at any extra edited times in `splitAt`, so a transition in
+ * the middle of a kept range gets a join to live on), with the cards in
+ * between. With no cards or splits this is exactly the playable ranges.
  */
-export function buildProgramItems(ranges: PlayableRange[], slots: CardSlot[]): ProgramItem[] {
+export function buildProgramItems(ranges: PlayableRange[], slots: CardSlot[], splitAt: number[] = []): ProgramItem[] {
+  // Stable sort keeps cards in slot order; a split at a card's moment adds nothing.
+  const events: { editedAt: number; card?: CardOperation }[] = [
+    ...slots.map((s) => ({ editedAt: s.editedAt, card: s.card })),
+    ...splitAt.map((editedAt) => ({ editedAt })),
+  ].sort((a, b) => a.editedAt - b.editedAt);
+
   const items: ProgramItem[] = [];
   let next = 0;
   let edited = 0;
   for (const r of ranges) {
     let start = r.start;
     const rangeEditedEnd = edited + (r.end - r.start);
-    while (next < slots.length && slots[next].editedAt < rangeEditedEnd - EPSILON) {
-      const at = r.start + (slots[next].editedAt - edited);
+    while (next < events.length && events[next].editedAt < rangeEditedEnd - EPSILON) {
+      const at = r.start + (events[next].editedAt - edited);
       if (at > start + EPSILON) items.push({ kind: "source", start, end: at });
       start = Math.max(start, at);
-      items.push({ kind: "card", card: slots[next].card });
+      const card = events[next].card;
+      if (card) items.push({ kind: "card", card });
       next++;
     }
     if (r.end > start + EPSILON) items.push({ kind: "source", start, end: r.end });
     edited = rangeEditedEnd;
   }
-  for (; next < slots.length; next++) items.push({ kind: "card", card: slots[next].card });
+  for (; next < events.length; next++) {
+    const card = events[next].card;
+    if (card) items.push({ kind: "card", card });
+  }
   return items;
 }
 
@@ -172,6 +183,136 @@ export function cardStartTimes(items: ProgramItem[]): { start: number; card: Car
   let t = 0;
   for (const item of items) {
     if (item.kind === "card") starts.push({ start: t, card: item.card });
+    t += programItemDuration(item);
+  }
+  return starts;
+}
+
+/** A fade from/to a solid color, `seconds` long. */
+export type Fade = { color: "black" | "white"; seconds: number };
+
+/**
+ * How two consecutive program items are joined. "cut" is the usual 30ms
+ * declick crossfade; a dip fades the first item out to a color and the
+ * next in from it (half the seconds each); a crossfade blends into or out
+ * of a title card. None of them change the program's length.
+ */
+export type Join =
+  | { kind: "cut" }
+  | { kind: "dip"; color: "black" | "white"; seconds: number }
+  | { kind: "crossfade"; seconds: number };
+
+/** A transition placed on the edited timeline, at the start of its scene's content. */
+export type TransitionMarker = { transition: TransitionOperation; editedAt: number };
+
+const fadeColor = (t: TransitionOperation): "black" | "white" => (t.kind === "dipWhite" ? "white" : "black");
+
+/**
+ * Places transitions like cards (placeCards): one per moment (the latest
+ * wins), dropped with their scene if it's cut entirely. A transition at 0
+ * fades the episode in and one at the end fades it out.
+ */
+export function placeTransitions(
+  operations: EditOperation[],
+  ranges: PlayableRange[],
+  sourceDuration: number
+): { markers: TransitionMarker[]; fadeIn: Fade | null; fadeOut: Fade | null } {
+  const latest = new Map<number, TransitionOperation>();
+  for (const op of operations) {
+    if (op.type !== "transition") continue;
+    const key = Math.round(op.at * 1000);
+    const current = latest.get(key);
+    if (!current || op.createdAt >= current.createdAt) latest.set(key, op);
+  }
+
+  const splits = splitTimes(operations);
+  const markers: TransitionMarker[] = [];
+  let fadeIn: Fade | null = null;
+  let fadeOut: Fade | null = null;
+  for (const transition of latest.values()) {
+    const fade = { color: fadeColor(transition), seconds: transition.duration };
+    if (transition.at <= EPSILON) {
+      fadeIn = fade;
+      continue;
+    }
+    if (transition.at >= sourceDuration - EPSILON) {
+      fadeOut = fade;
+      continue;
+    }
+    const sceneEnd = splits.find((t) => t > transition.at + EPSILON) ?? sourceDuration;
+    if (!ranges.some((r) => r.start < sceneEnd && r.end > transition.at)) continue;
+    const resumeAt = nextPlayableTime(transition.at, ranges);
+    if (resumeAt === null) continue;
+    markers.push({ transition, editedAt: sourceTimeToEditedTime(resumeAt, ranges) });
+  }
+  return { markers: markers.sort((a, b) => a.editedAt - b.editedAt), fadeIn, fadeOut };
+}
+
+/**
+ * The join style between each pair of consecutive items (entry i joins
+ * items[i] and items[i+1]). Every join at a transition's moment gets it --
+ * with a card there, that's both the join into the card and out of it. A
+ * crossfade needs a card on one side; between two stretches of footage it
+ * falls back to a plain cut.
+ */
+export function resolveJoins(items: ProgramItem[], markers: TransitionMarker[]): Join[] {
+  const joins: Join[] = [];
+  let edited = 0;
+  for (let i = 0; i < items.length - 1; i++) {
+    const item = items[i];
+    if (item.kind === "source") edited += item.end - item.start;
+    const marker = markers.find((m) => Math.abs(m.editedAt - edited) <= EPSILON);
+    if (!marker) {
+      joins.push({ kind: "cut" });
+      continue;
+    }
+    const { kind, duration } = marker.transition;
+    if (kind === "crossfade") {
+      const touchesCard = item.kind === "card" || items[i + 1].kind === "card";
+      joins.push(touchesCard ? { kind: "crossfade", seconds: duration } : { kind: "cut" });
+    } else {
+      joins.push({ kind: "dip", color: fadeColor(marker.transition), seconds: duration });
+    }
+  }
+  return joins;
+}
+
+/** Everything that plays, and how it's stitched together. */
+export type Program = {
+  slots: CardSlot[];
+  items: ProgramItem[];
+  joins: Join[];
+  fadeIn: Fade | null;
+  fadeOut: Fade | null;
+};
+
+export function buildProgram(operations: EditOperation[], ranges: PlayableRange[], sourceDuration: number): Program {
+  const slots = placeCards(operations, ranges, sourceDuration);
+  const { markers, fadeIn, fadeOut } = placeTransitions(operations, ranges, sourceDuration);
+  const items = buildProgramItems(
+    ranges,
+    slots,
+    markers.map((m) => m.editedAt)
+  );
+  return { slots, items, joins: resolveJoins(items, markers), fadeIn, fadeOut };
+}
+
+/** True when the program is just the playable ranges, cut together as always. */
+export function isPlainProgram(program: Program): boolean {
+  return (
+    program.slots.length === 0 &&
+    !program.fadeIn &&
+    !program.fadeOut &&
+    program.joins.every((j) => j.kind === "cut")
+  );
+}
+
+/** Program time at which each item starts (entry i+1 is also where join i happens). */
+export function itemStartTimes(items: ProgramItem[]): number[] {
+  const starts: number[] = [];
+  let t = 0;
+  for (const item of items) {
+    starts.push(t);
     t += programItemDuration(item);
   }
   return starts;
