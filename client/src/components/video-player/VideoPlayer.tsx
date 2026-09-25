@@ -12,6 +12,7 @@ import { locateProgramTime } from "@/lib/timeline/program";
 import { programPlayhead, useProgram } from "@/lib/timeline/useProgram";
 import { useCardPlayback } from "@/components/video-player/useCardPlayback";
 import { CardPreview } from "@/components/video-player/CardPreview";
+import { TransitionOverlay } from "@/components/video-player/TransitionOverlay";
 import { generateCaptions } from "@/lib/captions/generate";
 import { formatTimecode } from "@/lib/timeline/format";
 import { getFilterPreset } from "@/lib/video/filters";
@@ -315,6 +316,10 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
           data-playing={isPlaying}
         />
         <CropOverlay />
+        {/* Under the logo, like the export: the watermark stays on top of cards and transitions. */}
+        {activeCard && <CardPreview card={activeCard} elapsed={card?.elapsed} />}
+        <TransitionOverlay videoRef={videoRef} program={program} />
+        {cardDraft && <CardPreview card={cardDraft} />}
         {logoUrl && (
           <img
             src={logoUrl}
@@ -324,8 +329,6 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
             style={logoPositionToCss(logoPosition, logoPaddingX, logoPaddingY, logoOpacity)}
           />
         )}
-        {activeCard && <CardPreview card={activeCard} elapsed={card?.elapsed} />}
-        {cardDraft && <CardPreview card={cardDraft} />}
         {burnInCaptions && activeCue && !activeCard && !cardDraft && (
           <div
             className="pointer-events-none absolute inset-x-0 flex justify-center px-4"
