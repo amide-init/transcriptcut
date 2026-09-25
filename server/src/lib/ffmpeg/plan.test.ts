@@ -522,3 +522,71 @@ describe("transitions", () => {
     ).toThrow(/joins/);
   });
 });
+
+describe("B-roll", () => {
+  const frame = { width: 1920, height: 1080 };
+  const video = {
+    path: "/data/media/clip.mp4",
+    image: false,
+    start: 12,
+    end: 17,
+    offset: 2,
+    mode: "full" as const,
+    corner: "top-right" as const,
+  };
+  const image = { ...video, path: "/data/media/photo.png", image: true, mode: "pip" as const, start: 30, end: 34 };
+  const render = (extra: Partial<Parameters<typeof buildRenderArgs>[0]> = {}) =>
+    buildRenderArgs({ ...baseArgs, broll: { frame, overlays: [video, image] }, ...extra });
+  const graphOf = (args: string[]) => args[args.indexOf("-filter_complex") + 1];
+
+  it("adds each file as an input after the source, looping images for their slot", () => {
+    const args = render();
+    expect(args.slice(0, 11)).toEqual([
+      "-y",
+      "-i",
+      "/data/in.mp4",
+      "-i",
+      "/data/media/clip.mp4",
+      "-loop",
+      "1",
+      "-t",
+      "4.500",
+      "-i",
+      "/data/media/photo.png",
+    ]);
+  });
+
+  it("trims video B-roll from its offset, holds its last frame, and fills the frame when full screen", () => {
+    expect(graphOf(render())).toContain(
+      "[1:v]trim=start=2.000:duration=5.000,setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=5.000,scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,setsar=1,setpts=PTS-STARTPTS+12.000/TB[broll0]"
+    );
+  });
+
+  it("shows each piece only in its slot, picture-in-picture in its corner", () => {
+    const g = graphOf(render());
+    expect(g).toContain("[outv][broll0]overlay=x=0:y=0:enable='between(t,12.000,17.000)':eof_action=pass[brolled0]");
+    expect(g).toContain("[2:v]scale=614:-2,setsar=1,setpts=PTS-STARTPTS+30.000/TB[broll1]");
+    expect(g).toContain(
+      "[brolled0][broll1]overlay=x=main_w-overlay_w-44:y=44:enable='between(t,30.000,34.000)':eof_action=pass[brolled1]"
+    );
+  });
+
+  it("shifts the logo and metadata inputs past the B-roll", () => {
+    const args = render({
+      logoPath: "/data/logo.png",
+      logoPosition: "bottom-right",
+      videoWidth: 1920,
+      videoHeight: 1080,
+      metadataPath: "/data/meta.ffmeta",
+    });
+    expect(graphOf(args)).toContain("[3:v]format=rgba");
+    expect(args[args.indexOf("-map_metadata") + 1]).toBe("4");
+  });
+
+  it("refuses bad timing or modes", () => {
+    expect(() => buildRenderArgs({ ...baseArgs, broll: { frame, overlays: [{ ...video, end: 12 }] } })).toThrow(/timing/);
+    expect(() =>
+      buildRenderArgs({ ...baseArgs, broll: { frame, overlays: [{ ...video, mode: "zoom" as "full" }] } })
+    ).toThrow(/mode/);
+  });
+});

@@ -1,5 +1,6 @@
 import type { PlayableRange } from "@/types/timeline";
 import type { Fade, Join, ProgramItem } from "@/lib/timeline/program";
+import { OVERLAY_CORNERS, type OverlayCorner, type OverlayMode } from "@/types/edit-operation";
 import { getFfmpegFilter } from "@/lib/ffmpeg/filters";
 import { buildPropertiesFilter } from "@/lib/ffmpeg/properties";
 import { buildForceStyle, type CaptionStyle } from "@/lib/captions/style";
@@ -345,6 +346,85 @@ export function buildAudioOnlyRenderArgs(args: {
   ];
 }
 
+/** One piece of B-roll to composite: a media file shown from `start` to `end` of the program. */
+export type RenderOverlay = {
+  /** Absolute path, already resolved inside DATA_DIR. */
+  path: string;
+  image: boolean;
+  start: number;
+  end: number;
+  /** Seconds into a video to start from. */
+  offset: number;
+  mode: OverlayMode;
+  corner: OverlayCorner;
+};
+
+/** Picture-in-picture width and inset, as fractions of the frame. */
+const PIP_WIDTH_FRACTION = 0.32;
+const PIP_INSET_FRACTION = 0.04;
+
+const even = (n: number) => Math.max(2, Math.round(n / 2) * 2);
+
+function assertValidOverlay(o: RenderOverlay): void {
+  if (!o.path) throw new Error("B-roll has no file.");
+  if (![o.start, o.end, o.offset].every(Number.isFinite) || o.start < 0 || o.end <= o.start || o.offset < 0) {
+    throw new Error("Invalid B-roll timing.");
+  }
+  if (o.mode !== "full" && o.mode !== "pip") throw new Error("Invalid B-roll mode.");
+  if (!(OVERLAY_CORNERS as readonly string[]).includes(o.corner)) throw new Error("Invalid B-roll corner.");
+}
+
+/**
+ * Input args and filter chains that composite B-roll onto `inputLabel`.
+ * Each file is an extra input (index firstInput + i): an image is looped
+ * for its slot, a video is trimmed from its offset and holds its last
+ * frame if it runs short. Each is scaled for its mode, shifted to its
+ * program start, and overlaid only between its start and end. Every value
+ * is a validated number or a fixed keyword; file paths only ever appear as
+ * -i arguments, never inside the filtergraph.
+ */
+function buildOverlayChains(
+  overlays: RenderOverlay[],
+  frame: { width: number; height: number },
+  inputLabel: string,
+  firstInput: number
+): { inputs: string[]; chains: string[]; outLabel: string } {
+  const { width, height } = frame;
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) {
+    throw new Error(`Invalid B-roll frame size: ${width}x${height}`);
+  }
+  const pipWidth = even(width * PIP_WIDTH_FRACTION);
+  const inset = even(Math.min(width, height) * PIP_INSET_FRACTION);
+
+  const inputs: string[] = [];
+  const chains: string[] = [];
+  let label = inputLabel;
+  overlays.forEach((o, i) => {
+    assertValidOverlay(o);
+    const length = o.end - o.start;
+    const input = firstInput + i;
+    inputs.push(...(o.image ? ["-loop", "1", "-t", (length + 0.5).toFixed(3)] : []), "-i", o.path);
+
+    const scale =
+      o.mode === "full"
+        ? `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},setsar=1`
+        : `scale=${pipWidth}:-2,setsar=1`;
+    const source = o.image
+      ? `[${input}:v]${scale}`
+      : `[${input}:v]trim=start=${o.offset.toFixed(3)}:duration=${length.toFixed(3)},setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=${length.toFixed(3)},${scale}`;
+    chains.push(`${source},setpts=PTS-STARTPTS+${o.start.toFixed(3)}/TB[broll${i}]`);
+
+    const x = o.mode === "full" ? "0" : o.corner.endsWith("left") ? String(inset) : `main_w-overlay_w-${inset}`;
+    const y = o.mode === "full" ? "0" : o.corner.startsWith("top") ? String(inset) : `main_h-overlay_h-${inset}`;
+    const next = `[brolled${i}]`;
+    chains.push(
+      `${label}[broll${i}]overlay=x=${x}:y=${y}:enable='between(t,${o.start.toFixed(3)},${o.end.toFixed(3)})':eof_action=pass${next}`
+    );
+    label = next;
+  });
+  return { inputs, chains, outLabel: label };
+}
+
 /**
  * Crop to the target aspect ratio (full height, sliding horizontally by
  * cropX, when the source is wider; full width, centered vertically, when it
@@ -445,6 +525,12 @@ export function buildRenderArgs(args: {
    */
   program?: RenderProgram;
   cardFrame?: { width: number; height: number; textPath: string };
+  /**
+   * B-roll to composite, on the program timeline, and the source frame
+   * size it's laid out on (applied before any reframe, so a clip crops
+   * B-roll with the footage).
+   */
+  broll?: { frame: { width: number; height: number }; overlays: RenderOverlay[] };
 }): string[] {
   const {
     inputPath,
@@ -467,6 +553,7 @@ export function buildRenderArgs(args: {
     frameRate,
     program,
     cardFrame,
+    broll,
   } = args;
 
   const layout = layoutProgram(playableRanges, program);
@@ -560,6 +647,17 @@ export function buildRenderArgs(args: {
     videoOutLabel = "[filtered]";
   }
 
+  // B-roll sits above the footage (ungraded, like the cards) and below
+  // card text, captions and the logo.
+  const brollInputs: string[] = [];
+  if (broll && broll.overlays.length > 0) {
+    const built = buildOverlayChains(broll.overlays, broll.frame, videoOutLabel, 1);
+    filterChains.push(...built.chains);
+    brollInputs.push(...built.inputs);
+    videoOutLabel = built.outLabel;
+  }
+  const logoInput = 1 + (broll?.overlays.length ?? 0);
+
   if (reframe) {
     filterChains.push(`${videoOutLabel}${buildReframeFilter(reframe)}[reframed]`);
     videoOutLabel = "[reframed]";
@@ -621,19 +719,20 @@ export function buildRenderArgs(args: {
     const maxLogoHeight = Math.round(videoHeight * LOGO_MAX_HEIGHT_FRACTION);
     const scaleFactor = `min(1,min(${maxLogoWidth}/iw,${maxLogoHeight}/ih))`;
     filterChains.push(
-      `[1:v]format=rgba,scale=w='trunc(iw*${scaleFactor}/2)*2':h='trunc(ih*${scaleFactor}/2)*2',colorchannelmixer=aa=${opacityFraction}[logosrc]`
+      `[${logoInput}:v]format=rgba,scale=w='trunc(iw*${scaleFactor}/2)*2':h='trunc(ih*${scaleFactor}/2)*2',colorchannelmixer=aa=${opacityFraction}[logosrc]`
     );
     filterChains.push(`${videoOutLabel}[logosrc]overlay=x=${x}:y=${y}[logoed]`);
     videoOutLabel = "[logoed]";
   }
 
-  // The metadata file is the last input: after the source and, if present, the logo.
-  const metadataInputIndex = String(logoPath && logoPosition ? 2 : 1);
+  // The metadata file is the last input: after the source, any B-roll and the logo.
+  const metadataInputIndex = String(logoPath && logoPosition ? logoInput + 1 : logoInput);
 
   return [
     "-y",
     "-i",
     inputPath,
+    ...brollInputs,
     ...(logoPath && logoPosition ? ["-i", logoPath] : []),
     ...(metadataPath ? ["-i", metadataPath] : []),
     "-filter_complex",
