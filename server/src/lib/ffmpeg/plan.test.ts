@@ -342,3 +342,85 @@ describe("reframe", () => {
     expect(() => buildRenderArgs({ ...baseArgs, reframe: { width: 1080.5, height: 1920, cropX: 0.5 } })).toThrow();
   });
 });
+
+describe("title cards", () => {
+  const card = {
+    id: "c1",
+    type: "card" as const,
+    at: 0,
+    duration: 3,
+    template: "title" as const,
+    title: "Welcome",
+    background: "#1e3a5f",
+    createdAt: 0,
+  };
+  const program = [
+    { kind: "card" as const, card },
+    { kind: "source" as const, start: 0, end: 10 },
+    { kind: "source" as const, start: 20, end: 30 },
+  ];
+  const cardFrame = { width: 1920, height: 1080, textPath: "/data/cards.ass" };
+  const graph = (extra: Partial<Parameters<typeof buildRenderArgs>[0]> = {}) => {
+    const args = buildRenderArgs({ ...baseArgs, program, cardFrame, ...extra });
+    return args[args.indexOf("-filter_complex") + 1];
+  };
+
+  it("generates each card as a solid-color segment at the source's size and frame rate", () => {
+    expect(graph()).toContain(
+      "color=c=0x1E3A5F:s=1920x1080:r=30000/1001:d=3.000,format=yuv420p,setsar=1,tpad=stop_mode=clone:stop_duration=0.1[v0]"
+    );
+  });
+
+  it("normalizes source segments so they can join the cards", () => {
+    expect(graph()).toContain(
+      "[0:v]trim=start=0.000:end=10.000,setpts=PTS-STARTPTS,fps=30000/1001,format=yuv420p,setsar=1,tpad=stop_mode=clone:stop_duration=0.1[v1]"
+    );
+  });
+
+  it("offsets each join by the durations before it, cards included", () => {
+    const g = graph();
+    expect(g).toContain("[v0][v1]xfade=transition=fade:duration=0.030:offset=2.970[vx1]");
+    expect(g).toContain("[vx1][v2]xfade=transition=fade:duration=0.030:offset=12.940[outv]");
+  });
+
+  it("gives cards silence in a shared audio format", () => {
+    const g = graph();
+    expect(g).toContain(
+      "anullsrc=r=48000:cl=stereo,atrim=duration=3.000,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo[a0]"
+    );
+    expect(g).toContain(
+      "[0:a]atrim=start=0.000:end=10.000,asetpts=PTS-STARTPTS,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo[a1]"
+    );
+  });
+
+  it("grades only the footage, then burns card text in before captions", () => {
+    const g = graph({
+      filterId: "bw",
+      srtPath: "/data/subs.srt",
+      captionStyle: DEFAULT_CAPTION_STYLE,
+      videoHeight: 1080,
+      videoWidth: 1920,
+    });
+    expect(g).not.toContain("[outv]hue");
+    expect(g).toContain("[0:v]trim=start=0.000:end=10.000,setpts=PTS-STARTPTS,hue=s=0");
+    expect(g.split(";").find((chain) => chain.startsWith("color="))).not.toContain("hue");
+    expect(g.indexOf("subtitles=filename='/data/cards.ass'[carded]")).toBeLessThan(
+      g.indexOf("subtitles=filename='/data/subs.srt'")
+    );
+    expect(g).toMatch(/\[carded\]subtitles=filename='\/data\/subs\.srt'/);
+  });
+
+  it("refuses cards without the frame to generate them at, and bad values", () => {
+    expect(() => buildRenderArgs({ ...baseArgs, program })).toThrow(/frame size/);
+    expect(() => buildRenderArgs({ ...baseArgs, program, cardFrame: { ...cardFrame, width: 0 } })).toThrow(
+      /frame size/
+    );
+    const badColor = [{ kind: "card" as const, card: { ...card, background: "red" } }, program[1]];
+    expect(() => buildRenderArgs({ ...baseArgs, program: badColor, cardFrame })).toThrow(/background color/);
+  });
+
+  it("adds card silence to audio-only exports", () => {
+    const args = buildAudioOnlyRenderArgs({ ...baseArgs, program, format: "mp3" });
+    expect(args[args.indexOf("-filter_complex") + 1]).toContain("anullsrc=r=48000:cl=stereo,atrim=duration=3.000");
+  });
+});
