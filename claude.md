@@ -674,6 +674,18 @@ length (`plan.ts#layoutProgram`). The preview draws them with
 `TransitionOverlay` from the pure `transition-look.ts`, on its own
 animation-frame loop; audio fades aren't previewed.
 
+**Scene suggestions** are explicit buttons that only ever propose:
+"Suggest scenes" (gpt-4o-mini, sentence indices and titles only --
+`lib/ai/scenes.ts`, validated by `lib/scenes/suggest.ts`: whole
+sentences, the first scene at 0, at least 45s apart, boundaries in the
+silence before a sentence) and "From chapters" (client-side, no AI).
+Shot-change detection (`lib/ffmpeg/shots.ts`, a `shots` TranscriptionJob
+storing its times in `resultJson`) scores frames at 320px wide; a
+suggestion within 1.5s of a cut -- and not inside a word -- moves onto
+it. The user reviews the list and Apply adds the kept splits (and
+optional numbered chapter cards) as one undo step, renaming a split
+already within 1s instead of adding a sliver.
+
 **B-roll**: `media` assets (many per project, stored under a unique
 prefix, with name/size/length columns) placed by `overlay` operations:
 an asset shown from `start` to `end` in source time (so it follows cuts),
@@ -962,6 +974,10 @@ POST   /api/projects/:id/clips                   PATCH/DELETE /api/projects/:id/
 GET    /api/projects/:id/media                    (media library: images and clips for B-roll)
 POST   /api/projects/:id/media?filename=          (raw body, image/png|jpeg|webp or video/*; probed, refused if unreadable)
 GET    /api/projects/:id/media/:assetId/file      DELETE /api/projects/:id/media/:assetId (409 while B-roll uses it)
+
+POST   /api/projects/:id/scenes/shots            (202 + jobId; background shot-change detection)
+GET    /api/projects/:id/scenes/shots            (latest detection)   GET /api/projects/:id/scenes/shots/:jobId
+POST   /api/projects/:id/scenes/suggest          (gpt-4o-mini scene suggestions for review; never applied server-side)
 ```
 
 (No `POST /api/projects/:id/ai/edit` — the free-text AI command bar this

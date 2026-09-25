@@ -58,9 +58,13 @@ across the splice point rather than a hard cut, so the audio doesn't pop.
 ## Undo, redo, and restoring a specific cut
 
 Every edit is represented as an operation, applied in sequence. Undo
-reverts the latest operation; redo re-applies it. Beyond plain undo, you
-can also restore one specific previously-cut word, segment, or sentence
-directly — without having to undo everything after it.
+(**⌘Z**, or the button above the timeline) reverts the latest step; redo
+(**⇧⌘Z**) re-applies it. A step can hold many operations: removing every
+filler word, cutting everything one speaker said, or applying suggested
+scenes each undo in one go, and renaming a scene or restoring a cut can
+be undone too. Beyond plain undo, you can also restore one specific
+previously-cut word, segment, or sentence directly — without having to
+undo everything after it.
 
 The original uploaded video is never mutated for any of this — cuts are
 timeline state (which source ranges map to which timeline ranges), not
