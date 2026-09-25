@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { prisma } from "@/lib/db/client";
 import { runTranscriptionJob } from "@/lib/ai/transcription-job";
 import { errorResponse } from "@/lib/http";
+import { TRANSCRIPT_JOB_KINDS } from "@/lib/jobs";
 
 export const transcribeRoute = new Hono();
 
@@ -20,7 +21,8 @@ transcribeRoute.post("/:id/transcribe", async (c) => {
   }
 
   const running = await prisma.transcriptionJob.findFirst({
-    where: { projectId: id, status: { in: ["queued", "processing"] } },
+    // Only jobs that rewrite the transcript conflict; shot detection only reads the video.
+    where: { projectId: id, kind: { in: TRANSCRIPT_JOB_KINDS }, status: { in: ["queued", "processing"] } },
   });
   if (running) {
     return errorResponse(c, "ALREADY_TRANSCRIBING", "This project's transcript is already being processed.", 409);
