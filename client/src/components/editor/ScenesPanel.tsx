@@ -138,8 +138,9 @@ export function ScenesPanel() {
           Split scene at playhead
         </Button>
         <p className="text-muted-foreground">
-          Or press <kbd className="rounded border border-border px-1 font-mono">S</kbd>. Splits land between words, never
-          inside one.
+          Or press <kbd className="rounded border border-border px-1 font-mono">S</kbd>, or click a word in the
+          transcript and press <kbd className="rounded border border-border px-1 font-mono">/</kbd>. Splits land
+          between words, never inside one.
         </p>
       </div>
 
