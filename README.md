@@ -12,8 +12,8 @@ scoped buttons (filler words, speakers, chapters, show notes, highlights),
 of that was built and worked, then deliberately removed (see `claude.md`
 section 3 for why). **Local-first and open source** — runs entirely on
 your machine, no cloud account required. See the
-[docs](https://amide-init.github.io/transcriptcut/), especially the
-[Podcast Workflow](https://amide-init.github.io/transcriptcut/guide/podcasting)
+[docs](https://transcriptcut.aamin.me/), especially the
+[Podcast Workflow](https://transcriptcut.aamin.me/guide/podcasting)
 guide, and the
 [issue tracker](https://github.com/amide-init/transcriptcut/issues) for
 current build status.
@@ -77,7 +77,7 @@ suggested scenes, is a single undo step (**⌘Z** / **⇧⌘Z**).
 AI models only ever return text and sentence picks, never timestamps or
 edits: times always come from the transcript's own word timestamps, and
 every response is validated before use. See the
-[AI guide](https://amide-init.github.io/transcriptcut/guide/ai-editing)
+[AI guide](https://transcriptcut.aamin.me/guide/ai-editing)
 for which model does what.
 
 Export renders the final MP4 (or MP3/WAV) with every preview effect above (filters,
@@ -113,7 +113,7 @@ docs/        — documentation site (VitePress, deployed to GitHub Pages)
 The full docs site — getting started, architecture, the editing
 workflow, screenshots, and how to get involved — is published from
 [`docs/`](./docs) via GitHub Pages at
-**https://amide-init.github.io/transcriptcut/**.
+**https://transcriptcut.aamin.me/**.
 
 To run it locally:
 
@@ -175,7 +175,7 @@ Two things to know during development:
 
 A native macOS app is also available (Apple Silicon only) — no need to
 clone the repo or run anything. Grab it from the
-**[docs download page](https://amide-init.github.io/transcriptcut/download)**,
+**[docs download page](https://transcriptcut.aamin.me/download)**,
 which also covers the one-time Gatekeeper step (this build is ad-hoc
 signed, not signed with a paid Apple Developer account) and the
 first-launch API key setup.
