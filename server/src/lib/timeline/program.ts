@@ -2,6 +2,7 @@ import type {
   CardOperation,
   EditOperation,
   OverlayOperation,
+  PadOperation,
   SplitOperation,
   TransitionOperation,
 } from "@/types/edit-operation";
@@ -34,8 +35,11 @@ export type CardSlot = {
   resumeAt: number;
 };
 
+/** Frame padding on a stretch of footage: shrunk to `scale` of the frame, centred on `color`. */
+export type ItemPad = { scale: number; color: string };
+
 export type ProgramItem =
-  | { kind: "source"; start: number; end: number }
+  | { kind: "source"; start: number; end: number; pad?: ItemPad }
   | { kind: "card"; card: CardOperation };
 
 export function cardOperations(operations: EditOperation[]): CardOperation[] {
@@ -283,6 +287,38 @@ export function resolveJoins(items: ProgramItem[], markers: TransitionMarker[]):
   return joins;
 }
 
+/** A padded scene, in source time. */
+export type ScenePad = ItemPad & { start: number; end: number };
+
+/** A pad op belongs to the scene starting within this of its `at`. */
+const PAD_MATCH_SECONDS = 0.05;
+
+/**
+ * The padded scenes, in source time. A pad applies to the scene starting
+ * at its `at` (the latest one there wins); one whose split was removed
+ * matches no scene and is ignored.
+ */
+export function placePads(operations: EditOperation[], sourceDuration: number): ScenePad[] {
+  const starts = [0, ...splitTimes(operations)];
+  const pads: ScenePad[] = [];
+  starts.forEach((start, i) => {
+    const pad = operations
+      .filter((op): op is PadOperation => op.type === "pad" && Math.abs(op.at - start) <= PAD_MATCH_SECONDS)
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .at(-1);
+    const end = starts[i + 1] ?? sourceDuration;
+    if (pad && end > start + EPSILON) {
+      pads.push({ start, end, scale: 1 - (2 * pad.size) / 100, color: pad.color });
+    }
+  });
+  return pads;
+}
+
+/** The pad covering a source time, if any. */
+export function padAt(pads: ScenePad[], time: number): ScenePad | null {
+  return pads.find((p) => time >= p.start && time < p.end) ?? null;
+}
+
 /** Everything that plays, and how it's stitched together. */
 export type Program = {
   slots: CardSlot[];
@@ -291,6 +327,7 @@ export type Program = {
   fadeIn: Fade | null;
   fadeOut: Fade | null;
   overlays: PlacedOverlay[];
+  pads: ScenePad[];
 };
 
 /** B-roll on the program timeline. */
@@ -327,11 +364,22 @@ export function placeOverlays(
 export function buildProgram(operations: EditOperation[], ranges: PlayableRange[], sourceDuration: number): Program {
   const slots = placeCards(operations, ranges, sourceDuration);
   const { markers, fadeIn, fadeOut } = placeTransitions(operations, ranges, sourceDuration);
+  const pads = placePads(operations, sourceDuration);
+  // A padded scene's edges become item boundaries, so each item is either
+  // padded or not; they join with a plain cut, like any other boundary.
+  const padEdges = pads
+    .flatMap((p) => [p.start, p.end])
+    .filter((t) => ranges.some((r) => t > r.start + EPSILON && t < r.end - EPSILON))
+    .map((t) => sourceTimeToEditedTime(t, ranges));
   const items = buildProgramItems(
     ranges,
     slots,
-    markers.map((m) => m.editedAt)
-  );
+    [...markers.map((m) => m.editedAt), ...padEdges]
+  ).map((item) => {
+    if (item.kind !== "source") return item;
+    const pad = padAt(pads, (item.start + item.end) / 2);
+    return pad ? { ...item, pad: { scale: pad.scale, color: pad.color } } : item;
+  });
   return {
     slots,
     items,
@@ -339,6 +387,7 @@ export function buildProgram(operations: EditOperation[], ranges: PlayableRange[
     fadeIn,
     fadeOut,
     overlays: placeOverlays(operations, ranges, slots),
+    pads,
   };
 }
 
@@ -348,7 +397,8 @@ export function isPlainProgram(program: Program): boolean {
     program.slots.length === 0 &&
     !program.fadeIn &&
     !program.fadeOut &&
-    program.joins.every((j) => j.kind === "cut")
+    program.joins.every((j) => j.kind === "cut") &&
+    program.items.every((item) => item.kind === "card" || !item.pad)
   );
 }
 

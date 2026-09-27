@@ -145,6 +145,21 @@ describe("editOperationSchema", () => {
     });
   });
 
+  describe("pad", () => {
+    const pad = { id: "p1", type: "pad", at: 30, size: 10, color: "#112233", createdAt: 0 };
+
+    it("accepts a size in range and a hex color", () => {
+      expect(editOperationSchema.safeParse(pad).success).toBe(true);
+    });
+
+    it("rejects out-of-range sizes and colors that aren't '#RRGGBB'", () => {
+      expect(editOperationSchema.safeParse({ ...pad, size: 1 }).success).toBe(false);
+      expect(editOperationSchema.safeParse({ ...pad, size: 40 }).success).toBe(false);
+      expect(editOperationSchema.safeParse({ ...pad, color: "red" }).success).toBe(false);
+      expect(editOperationSchema.safeParse({ ...pad, color: "#112233:x=1" }).success).toBe(false);
+    });
+  });
+
   describe("overlay", () => {
     const overlay = { id: "o1", type: "overlay", assetId: "cmabc123", start: 10, end: 15, mode: "pip", corner: "top-right", createdAt: 0 };
 

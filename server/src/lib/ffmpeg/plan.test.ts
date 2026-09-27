@@ -523,6 +523,47 @@ describe("transitions", () => {
   });
 });
 
+describe("scene padding", () => {
+  const items = [
+    { kind: "source" as const, start: 0, end: 10 },
+    { kind: "source" as const, start: 10, end: 20, pad: { scale: 0.8, color: "#ff0000" } },
+  ];
+  const program = { items, joins: [{ kind: "cut" as const }], fadeIn: null, fadeOut: null };
+  const padFrame = { width: 1920, height: 1080 };
+  const graph = (extra: Partial<Parameters<typeof buildRenderArgs>[0]> = {}) => {
+    const args = buildRenderArgs({ ...baseArgs, program, padFrame, ...extra });
+    return args[args.indexOf("-filter_complex") + 1];
+  };
+
+  it("shrinks a padded scene and pads it back out to the source's size", () => {
+    expect(graph()).toContain(
+      "[0:v]trim=start=10.000:end=20.000" +
+        ",setpts=PTS-STARTPTS,fps=30000/1001,format=yuv420p,setsar=1,scale=1536:864,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=0xFF0000,setsar=1[v1]"
+    );
+  });
+
+  it("leaves unpadded scenes at full frame and grades per segment so the border keeps its color", () => {
+    const g = graph({ filterId: "bw" });
+    expect(g).toContain("[0:v]trim=start=0.000:end=10.000,setpts=PTS-STARTPTS,hue=s=0");
+    expect(g.split(";").find((chain) => chain.endsWith("[v0]"))).not.toContain(",pad=");
+    expect(g).not.toContain("[outv]hue");
+  });
+
+  it("refuses padding without the frame size, and bad values", () => {
+    expect(() => buildRenderArgs({ ...baseArgs, program })).toThrow(/frame size/);
+    const bad = (pad: { scale: number; color: string }) => ({
+      ...program,
+      items: [items[0], { ...items[1], pad }],
+    });
+    expect(() => buildRenderArgs({ ...baseArgs, program: bad({ scale: 0.8, color: "red" }), padFrame })).toThrow(
+      /padding color/
+    );
+    expect(() => buildRenderArgs({ ...baseArgs, program: bad({ scale: 1.2, color: "#ff0000" }), padFrame })).toThrow(
+      /padding size/
+    );
+  });
+});
+
 describe("B-roll", () => {
   const frame = { width: 1920, height: 1080 };
   const video = {

@@ -4,6 +4,7 @@ import {
   buildProgramItems,
   isPlainProgram,
   placeOverlays,
+  placePads,
   cardStartTimes,
   cardsDuration,
   editedRangeToProgram,
@@ -191,6 +192,51 @@ describe("transitions", () => {
       { kind: "source", start: 45, end: 100 },
     ]);
     expect(p.joins[0]).toMatchObject({ kind: "dip" });
+  });
+});
+
+describe("scene padding", () => {
+  const pad = (at: number, size = 10, createdAt = 0): EditOperation => ({
+    id: `pad-${at}-${createdAt}`,
+    type: "pad",
+    at,
+    size,
+    color: "#ff0000",
+    createdAt,
+  });
+  const build = (ops: EditOperation[], duration = 100) => {
+    const ranges = computePlayableRanges(
+      duration,
+      ops.filter((op): op is CutOperation => op.type === "cut")
+    );
+    return buildProgram(ops, ranges, duration);
+  };
+
+  it("pads only its own scene, splitting the footage at the scene's edges", () => {
+    const p = build([split(40), split(70), pad(40)]);
+    expect(p.items).toEqual([
+      { kind: "source", start: 0, end: 40 },
+      { kind: "source", start: 40, end: 70, pad: { scale: 0.8, color: "#ff0000" } },
+      { kind: "source", start: 70, end: 100 },
+    ]);
+    expect(p.joins).toEqual([{ kind: "cut" }, { kind: "cut" }]);
+    expect(isPlainProgram(p)).toBe(false);
+  });
+
+  it("pads the first scene with a pad at 0, and follows cuts inside the scene", () => {
+    const p = build([split(40), cut(10, 20), pad(0, 5)]);
+    expect(p.items).toEqual([
+      { kind: "source", start: 0, end: 10, pad: { scale: 0.9, color: "#ff0000" } },
+      { kind: "source", start: 20, end: 40, pad: { scale: 0.9, color: "#ff0000" } },
+      { kind: "source", start: 40, end: 100 },
+    ]);
+  });
+
+  it("keeps the latest pad at a scene and ignores one whose split is gone", () => {
+    expect(placePads([split(40), pad(40, 5, 1), pad(40, 20, 2)], 100)).toEqual([
+      { start: 40, end: 100, scale: 0.6, color: "#ff0000" },
+    ]);
+    expect(isPlainProgram(build([pad(40)]))).toBe(true);
   });
 });
 

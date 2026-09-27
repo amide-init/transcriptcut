@@ -83,6 +83,20 @@ export type EditOperation =
       offset?: number;
     })
   | (OperationBase & {
+      /**
+       * Frame padding for the scene starting at `at`: the footage is shrunk
+       * by `size`% of the frame on each side and centred on a solid border.
+       * The output size never changes; cards, B-roll, captions and the logo
+       * are unaffected. See lib/timeline/program.ts#placePads.
+       */
+      type: "pad";
+      at: number;
+      /** Border width as a percent of the frame, per side. */
+      size: number;
+      /** '#RRGGBB' */
+      color: string;
+    })
+  | (OperationBase & {
       type: "caption";
       text: string;
       start: number;
@@ -111,8 +125,12 @@ export type OverlayMode = (typeof OVERLAY_MODES)[number];
 export const OVERLAY_CORNERS = ["top-left", "top-right", "bottom-left", "bottom-right"] as const;
 export type OverlayCorner = (typeof OVERLAY_CORNERS)[number];
 
+export const PAD_MIN_PERCENT = 2;
+export const PAD_MAX_PERCENT = 25;
+
 export type CutOperation = Extract<EditOperation, { type: "cut" }>;
 export type SplitOperation = Extract<EditOperation, { type: "split" }>;
 export type CardOperation = Extract<EditOperation, { type: "card" }>;
 export type TransitionOperation = Extract<EditOperation, { type: "transition" }>;
 export type OverlayOperation = Extract<EditOperation, { type: "overlay" }>;
+export type PadOperation = Extract<EditOperation, { type: "pad" }>;
