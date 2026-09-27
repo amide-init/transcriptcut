@@ -12,6 +12,7 @@ import { locateProgramTime } from "@/lib/timeline/program";
 import { programPlayhead, useProgram } from "@/lib/timeline/useProgram";
 import { useCardPlayback } from "@/components/video-player/useCardPlayback";
 import { CardPreview } from "@/components/video-player/CardPreview";
+import { PaddingLayer } from "@/components/video-player/PaddingLayer";
 import { TransitionOverlay } from "@/components/video-player/TransitionOverlay";
 import { BrollLayer } from "@/components/video-player/BrollLayer";
 import { generateCaptions } from "@/lib/captions/generate";
@@ -298,10 +299,11 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
         the same way ffmpeg's PlayResY does for the export (GitHub #22).
       */}
       <div className="relative min-h-0 flex-1 overflow-hidden [container-type:size]">
+        <PaddingLayer videoRef={videoRef} program={program} />
         <video
           ref={videoRef}
           src={videoUrl}
-          className="h-full w-full object-contain"
+          className="relative h-full w-full object-contain"
           style={{ filter: filterCss }}
           onLoadedMetadata={(e) => handleDurationKnown(e.currentTarget)}
           onTimeUpdate={handleTimeUpdate}
