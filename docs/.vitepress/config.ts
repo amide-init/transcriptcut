@@ -1,17 +1,18 @@
 import { defineConfig } from "vitepress";
 
-// Deployed to GitHub Pages as a project site at
-// https://amide-init.github.io/transcriptcut/ — base must match the repo
-// name so built asset URLs resolve correctly.
+// Deployed to GitHub Pages under the custom domain
+// https://transcriptcut.aamin.me/, served from the domain root -- so base
+// is "/". (It was "/transcriptcut/" for the old github.io project-site
+// URL; with the custom domain that prefix makes every asset 404.)
 export default defineConfig({
   title: "transcriptcut",
   description:
     "Edit video podcasts by editing the transcript: clean audio, speakers, chapters, show notes and Shorts. Local-first, open source, no cloud account required.",
-  base: "/transcriptcut/",
+  base: "/",
   lastUpdated: true,
   cleanUrls: true,
 
-  head: [["link", { rel: "icon", href: "/transcriptcut/favicon.svg" }]],
+  head: [["link", { rel: "icon", href: "/favicon.svg" }]],
 
   themeConfig: {
     logo: "/favicon.svg",
