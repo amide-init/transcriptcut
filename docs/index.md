@@ -116,11 +116,11 @@ works end to end.
 
 </div>
 
-<a href="/transcriptcut/screenshots" style="display:block;margin-top:1rem;">
+<a href="/screenshots" style="display:block;margin-top:1rem;">
   <img src="/screenshots/ai-tools-panel.png" alt="AI tools panel with Find filler words and Find long pauses, flagged words underlined in the transcript" style="width:100%;border-radius:12px;border:1px solid var(--vp-c-divider);box-shadow:var(--vp-shadow-3);"/>
 </a>
 
-<p style="margin-top:0.75rem;"><a href="/transcriptcut/screenshots">See more screenshots →</a></p>
+<p style="margin-top:0.75rem;"><a href="/screenshots">See more screenshots →</a></p>
 
 <style>
 /* The default hero image slot is sized/masked for a small square logo.
