@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "Asset" ADD COLUMN "name" TEXT;
+ALTER TABLE "Asset" ADD COLUMN "width" INTEGER;
+ALTER TABLE "Asset" ADD COLUMN "height" INTEGER;
+ALTER TABLE "Asset" ADD COLUMN "duration" REAL;

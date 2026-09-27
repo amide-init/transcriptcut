@@ -10,6 +10,7 @@ import { ExportButton } from "@/components/editor/ExportButton";
 import { ProjectNameField } from "@/components/editor/ProjectNameField";
 import { GithubLink } from "@/components/GithubLink";
 import { usePlayerStore } from "@/stores/player-store";
+import { useEditorShortcuts } from "@/components/editor/useEditorShortcuts";
 
 export function EditorLayout({ videoUrl }: { videoUrl: string }) {
   // Matches the preview's aspect box to the source video's own aspect ratio
@@ -18,6 +19,7 @@ export function EditorLayout({ videoUrl }: { videoUrl: string }) {
   // editor for non-16:9 video that the actual ffmpeg export never had,
   // since export doesn't touch aspect ratio at all.
   const aspectRatio = usePlayerStore((s) => s.aspectRatio);
+  useEditorShortcuts();
 
   return (
     <div className="flex h-screen flex-col gap-3 p-3">

@@ -77,4 +77,101 @@ describe("editOperationSchema", () => {
     const result = editOperationSchema.safeParse({ id: "1", type: "cut", start: 0, timestamp: 5, createdAt: 0 });
     expect(result.success).toBe(false);
   });
+
+  it("accepts a split with a scene title, source and group", () => {
+    expect(
+      editOperationSchema.safeParse({
+        id: "1",
+        type: "split",
+        timestamp: 42.5,
+        title: "Pricing",
+        source: "ai",
+        groupId: "g1",
+        createdAt: 0,
+      }).success
+    ).toBe(true);
+  });
+
+  it("rejects an over-long scene title and an unknown split source", () => {
+    const base = { id: "1", type: "split", timestamp: 3, createdAt: 0 };
+    expect(editOperationSchema.safeParse({ ...base, title: "x".repeat(81) }).success).toBe(false);
+    expect(editOperationSchema.safeParse({ ...base, source: "robot" }).success).toBe(false);
+  });
+
+  describe("card", () => {
+    const card = {
+      id: "c1",
+      type: "card",
+      at: 30,
+      duration: 3,
+      template: "chapter",
+      title: "Part 2: Pricing",
+      subtitle: "What it really costs",
+      background: "#101820",
+      createdAt: 0,
+    };
+
+    it("accepts a valid card", () => {
+      expect(editOperationSchema.safeParse(card).success).toBe(true);
+    });
+
+    it("rejects out-of-range durations, unknown templates and bad colors", () => {
+      expect(editOperationSchema.safeParse({ ...card, duration: 0.5 }).success).toBe(false);
+      expect(editOperationSchema.safeParse({ ...card, duration: 11 }).success).toBe(false);
+      expect(editOperationSchema.safeParse({ ...card, template: "spinning" }).success).toBe(false);
+      expect(editOperationSchema.safeParse({ ...card, background: "red" }).success).toBe(false);
+    });
+
+    it("rejects an empty title and text that would be read as ASS override tags", () => {
+      expect(editOperationSchema.safeParse({ ...card, title: "   " }).success).toBe(false);
+      expect(editOperationSchema.safeParse({ ...card, title: "{\\fs200}Big" }).success).toBe(false);
+      expect(editOperationSchema.safeParse({ ...card, subtitle: "two\nlines" }).success).toBe(false);
+    });
+  });
+
+  describe("transition", () => {
+    const transition = { id: "t1", type: "transition", at: 30, kind: "dipBlack", duration: 1, createdAt: 0 };
+
+    it("accepts each kind", () => {
+      for (const kind of ["dipBlack", "dipWhite", "crossfade"]) {
+        expect(editOperationSchema.safeParse({ ...transition, kind }).success).toBe(true);
+      }
+    });
+
+    it("rejects unknown kinds and out-of-range durations", () => {
+      expect(editOperationSchema.safeParse({ ...transition, kind: "wipe" }).success).toBe(false);
+      expect(editOperationSchema.safeParse({ ...transition, duration: 0.1 }).success).toBe(false);
+      expect(editOperationSchema.safeParse({ ...transition, duration: 5 }).success).toBe(false);
+    });
+  });
+
+  describe("pad", () => {
+    const pad = { id: "p1", type: "pad", at: 30, size: 10, color: "#112233", createdAt: 0 };
+
+    it("accepts a size in range and a hex color", () => {
+      expect(editOperationSchema.safeParse(pad).success).toBe(true);
+    });
+
+    it("rejects out-of-range sizes and colors that aren't '#RRGGBB'", () => {
+      expect(editOperationSchema.safeParse({ ...pad, size: 1 }).success).toBe(false);
+      expect(editOperationSchema.safeParse({ ...pad, size: 40 }).success).toBe(false);
+      expect(editOperationSchema.safeParse({ ...pad, color: "red" }).success).toBe(false);
+      expect(editOperationSchema.safeParse({ ...pad, color: "#112233:x=1" }).success).toBe(false);
+    });
+  });
+
+  describe("overlay", () => {
+    const overlay = { id: "o1", type: "overlay", assetId: "cmabc123", start: 10, end: 15, mode: "pip", corner: "top-right", createdAt: 0 };
+
+    it("accepts full-screen and picture-in-picture B-roll", () => {
+      expect(editOperationSchema.safeParse(overlay).success).toBe(true);
+      expect(editOperationSchema.safeParse({ ...overlay, mode: "full", corner: undefined, offset: 2.5 }).success).toBe(true);
+    });
+
+    it("rejects unknown modes and corners, and asset ids that aren't plain ids", () => {
+      expect(editOperationSchema.safeParse({ ...overlay, mode: "split" }).success).toBe(false);
+      expect(editOperationSchema.safeParse({ ...overlay, corner: "middle" }).success).toBe(false);
+      expect(editOperationSchema.safeParse({ ...overlay, assetId: "../../etc/passwd" }).success).toBe(false);
+    });
+  });
 });

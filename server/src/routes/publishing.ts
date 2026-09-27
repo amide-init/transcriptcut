@@ -4,12 +4,13 @@ import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/db/client";
 import { errorResponse } from "@/lib/http";
 import { computePlayableRanges, getEditedDuration } from "@/lib/timeline/cuts";
+import { cardsDuration, editedRangeToProgram, placeCards } from "@/lib/timeline/program";
 import { buildEditedSentences, formatTranscript } from "@/lib/publishing/edited-transcript";
 import {
   chaptersFromPicks,
   cleanChapterTitle,
   minChapterSeconds,
-  resolveChapters,
+  resolveProgramChapters,
   toYoutubeChapters,
 } from "@/lib/publishing/chapters";
 import { generateChapterPicks, generateShowNotes } from "@/lib/ai/publishing";
@@ -32,16 +33,22 @@ async function loadEditedProject(id: string) {
   if (project.duration === null) return fail("NO_DURATION", "This project's video duration isn't known yet.", 400);
 
   const transcript: Transcript = { id: project.transcript.id, segments: JSON.parse(project.transcript.segmentsJson) };
-  const cuts = project.editOperations
-    .map((op) => JSON.parse(op.dataJson) as EditOperation)
-    .filter((op): op is CutOperation => op.type === "cut");
+  const operations = project.editOperations.map((op) => JSON.parse(op.dataJson) as EditOperation);
+  const cuts = operations.filter((op): op is CutOperation => op.type === "cut");
   const ranges = computePlayableRanges(project.duration, cuts);
+  const cardSlots = placeCards(operations, ranges, project.duration);
   return {
     ok: true as const,
     project,
     ranges,
-    editedDuration: getEditedDuration(ranges),
-    sentences: buildEditedSentences(transcript, cuts, project.duration),
+    cardSlots,
+    // What the export will run for, title cards included.
+    programDuration: getEditedDuration(ranges) + cardsDuration(cardSlots),
+    // Timestamps as heard in the export, title cards included.
+    sentences: buildEditedSentences(transcript, cuts, project.duration).map((sentence) => ({
+      ...sentence,
+      ...editedRangeToProgram(sentence.start, sentence.end, cardSlots),
+    })),
     chapters: project.publishingMeta?.chaptersJson ? (JSON.parse(project.publishingMeta.chaptersJson) as Chapter[]) : [],
     showNotes: project.publishingMeta?.showNotesJson
       ? (JSON.parse(project.publishingMeta.showNotesJson) as ShowNotes)
@@ -52,11 +59,11 @@ async function loadEditedProject(id: string) {
 type Loaded = Extract<Awaited<ReturnType<typeof loadEditedProject>>, { ok: true }>;
 
 function publishingResponse(c: Context, loaded: Loaded, chapters: Chapter[], showNotes: ShowNotes | null) {
-  const resolved = resolveChapters(chapters, loaded.ranges);
+  const resolved = resolveProgramChapters(chapters, loaded.ranges, loaded.cardSlots);
   return c.json({
     success: true,
     chapters: resolved,
-    youtubeChapters: toYoutubeChapters(resolved, loaded.editedDuration),
+    youtubeChapters: toYoutubeChapters(resolved, loaded.programDuration),
     showNotes,
   });
 }
@@ -88,7 +95,7 @@ publishingRoute.post("/:id/publishing/chapters", async (c) => {
   }
 
   try {
-    const minGap = minChapterSeconds(loaded.editedDuration);
+    const minGap = minChapterSeconds(loaded.programDuration);
     const picks = await generateChapterPicks(loaded.sentences, minGap);
     const chapters = chaptersFromPicks(picks, loaded.sentences, minGap);
     await saveMeta(id, { chaptersJson: JSON.stringify(chapters) });

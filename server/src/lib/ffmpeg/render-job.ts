@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db/client";
 import { resolveInDataDir, statAsset } from "@/lib/storage/local";
 import { computePlayableRanges } from "@/lib/timeline/cuts";
 import { buildAudioOnlyRenderArgs, buildLoudnessAnalysisArgs, buildRenderArgs } from "@/lib/ffmpeg/plan";
-import { resolveChapters, toFfmetadata } from "@/lib/publishing/chapters";
+import { resolveProgramChapters, toFfmetadata } from "@/lib/publishing/chapters";
 import { clipAsCuts } from "@/lib/clips/clips";
 import { captionStyleSchema } from "@/lib/validation/caption-style";
 import { CLIP_ASPECTS, CLIP_OUTPUT_SIZE, type ClipAspect } from "@/types/clips";
@@ -22,7 +22,19 @@ import {
 } from "@/lib/ffmpeg/audio-filters";
 import { parseStoredAudioSettings } from "@/lib/validation/audio-settings";
 import { runFfmpeg, runFfmpegCapturingStderr } from "@/lib/ffmpeg/run";
-import { probeVideoDimensions } from "@/lib/ffmpeg/probe";
+import type { RenderOverlay, RenderProgram } from "@/lib/ffmpeg/plan";
+import { probeVideoStream } from "@/lib/ffmpeg/probe";
+import {
+  buildProgram,
+  cardStartTimes,
+  cardsDuration,
+  editedRangeToProgram,
+  isPlainProgram,
+  placeOverlays,
+  type CardSlot,
+} from "@/lib/timeline/program";
+import { toCardsAss } from "@/lib/cards/ass";
+import type { CaptionCue } from "@/lib/captions/generate";
 import { generateCaptions, splitCuesForShorts } from "@/lib/captions/generate";
 import { toAssKaraoke, toSrt } from "@/lib/captions/format";
 import { DEFAULT_CAPTION_STYLE, type CaptionStyle } from "@/lib/captions/style";
@@ -63,7 +75,8 @@ export async function resolveLoudnessGain(
   inputPath: string,
   playableRanges: PlayableRange[],
   audioSettings: AudioSettings,
-  jobId: string
+  jobId: string,
+  program?: RenderProgram
 ): Promise<number | undefined> {
   const target = loudnessTargetLufs(audioSettings);
   if (target === null) return undefined;
@@ -71,7 +84,7 @@ export async function resolveLoudnessGain(
   const measure = async (gainDb?: number) => {
     const analysisChain = buildLoudnessAnalysisChain(audioSettings, gainDb)!;
     const stderr = await runFfmpegCapturingStderr(
-      buildLoudnessAnalysisArgs({ inputPath, playableRanges, analysisChain })
+      buildLoudnessAnalysisArgs({ inputPath, playableRanges, program, analysisChain })
     );
     return parseMeasuredLoudness(stderr);
   };
@@ -125,6 +138,16 @@ function toClipAspect(value: string): ClipAspect {
   return (CLIP_ASPECTS as readonly string[]).includes(value) ? (value as ClipAspect) : "9:16";
 }
 
+/** Caption cues moved from edited time onto the program timeline, around any title cards. */
+function cuesToProgramTime(cues: CaptionCue[], slots: CardSlot[]): CaptionCue[] {
+  if (slots.length === 0) return cues;
+  return cues.map((cue) => ({
+    ...cue,
+    ...editedRangeToProgram(cue.start, cue.end, slots),
+    words: cue.words.map((w) => ({ ...w, ...editedRangeToProgram(w.start, w.end, slots) })),
+  }));
+}
+
 export const EXPORT_MIME_TYPES: Record<ExportFormat, string> = {
   mp4: "video/mp4",
   mp3: "audio/mpeg",
@@ -164,13 +187,19 @@ export async function runRenderJob(
 
     // A clip is rendered as the project with everything outside it cut too,
     // so the project's own edits still apply inside the clip.
+    const operations = project.editOperations.map((op) => JSON.parse(op.dataJson) as EditOperation);
     const cuts = [
-      ...project.editOperations
-        .map((op) => JSON.parse(op.dataJson) as EditOperation)
-        .filter((op): op is CutOperation => op.type === "cut"),
+      ...operations.filter((op): op is CutOperation => op.type === "cut"),
       ...(clip ? clipAsCuts(clip, project.duration) : []),
     ];
     const playableRanges = computePlayableRanges(project.duration, cuts);
+    // Title cards and transitions play in full exports only: a clip is a standalone excerpt.
+    const built = clip ? null : buildProgram(operations, playableRanges, project.duration);
+    const cardSlots = built?.slots ?? [];
+    const program: RenderProgram | undefined =
+      built && !isPlainProgram(built)
+        ? { items: built.items, joins: built.joins, fadeIn: built.fadeIn, fadeOut: built.fadeOut }
+        : undefined;
 
     const inputPath = resolveInDataDir(originalAsset.filePath);
     const outputRelativePath = path.posix.join(
@@ -196,14 +225,41 @@ export async function runRenderJob(
     const captionStyle = clip ? shortsCaptionStyle(project.captionStyleJson) : options.captionStyle;
     const useKaraoke = burnInCaptions && captionStyle?.wordHighlight === true;
 
-    // Needed to size the logo overlay relative to the frame, and to convert
-    // force_style's fontSize/margin from percent-of-frame into the literal
-    // output pixels it actually requires (see ffmpeg/plan.ts) -- skip the
-    // probe when neither applies. The karaoke .ass path doesn't need this:
-    // it scales itself via PlayResX/Y instead (see lib/captions/format.ts).
-    // A clip's output size is known up front; no probe needed.
-    const needsVideoDimensions = !clipFrame && (useLogo || (burnInCaptions && !useKaraoke));
-    const videoDimensions = clipFrame ?? (needsVideoDimensions ? await probeVideoDimensions(inputPath) : undefined);
+    // Every video render needs the source's frame rate (see ffmpeg/plan.ts).
+    // The same probe gives its size, which sizes the logo overlay and
+    // converts force_style's percent-of-frame font size/margin into output
+    // pixels. A clip's output size is known up front, so it's used instead.
+    const sourceStream = isVideo ? await probeVideoStream(inputPath) : undefined;
+    const videoDimensions = clipFrame ?? sourceStream;
+
+    // Title cards are generated at the source's own size so they join it seamlessly.
+    let cardFrame: { width: number; height: number; textPath: string } | undefined;
+    // B-roll plays in clips too (it's part of the edit inside the clip's range).
+    const placedOverlays = built?.overlays ?? placeOverlays(operations, playableRanges, []);
+    const brollOverlays: RenderOverlay[] = placedOverlays.flatMap(({ overlay, start, end }) => {
+      const asset = project.assets.find((a) => a.id === overlay.assetId && a.kind === "media");
+      if (!asset) return [];
+      return [
+        {
+          path: resolveInDataDir(asset.filePath),
+          image: asset.mimeType.startsWith("image/"),
+          start,
+          end,
+          offset: overlay.offset ?? 0,
+          mode: overlay.mode,
+          corner: overlay.corner ?? "bottom-right",
+        },
+      ];
+    });
+
+    if (program && cardSlots.length > 0 && sourceStream) {
+      const textPath = resolveInDataDir(path.posix.join("projects", project.id, "render", `${jobId}.cards.ass`));
+      await writeFile(textPath, toCardsAss(cardStartTimes(program.items), sourceStream), "utf-8");
+      cardFrame = { width: sourceStream.width, height: sourceStream.height, textPath };
+    }
+
+    const hasPads = program?.items.some((item) => item.kind === "source" && item.pad) ?? false;
+    const padFrame = hasPads && sourceStream ? { width: sourceStream.width, height: sourceStream.height } : undefined;
 
     if (burnInCaptions) {
       if (!project.transcript) throw new Error("Captions were requested but this project has no transcript.");
@@ -211,7 +267,7 @@ export async function runRenderJob(
         id: project.transcript.id,
         segments: JSON.parse(project.transcript.segmentsJson),
       };
-      const sentenceCues = generateCaptions(transcript, cuts, project.duration);
+      const sentenceCues = cuesToProgramTime(generateCaptions(transcript, cuts, project.duration), cardSlots);
       const cues = clip ? splitCuesForShorts(sentenceCues) : sentenceCues;
       const subtitleExt = useKaraoke ? "ass" : "srt";
       const subtitleRelativePath = path.posix.join("projects", project.id, "render", `${jobId}.${subtitleExt}`);
@@ -229,7 +285,7 @@ export async function runRenderJob(
     const audioSettings = parseStoredAudioSettings(project.audioSettingsJson);
     const audioFilter = buildAudioFilterChain(
       audioSettings,
-      await resolveLoudnessGain(inputPath, playableRanges, audioSettings, jobId)
+      await resolveLoudnessGain(inputPath, playableRanges, audioSettings, jobId, program)
     );
 
     // Episode title + chapter markers, embedded so podcast apps and players
@@ -244,7 +300,11 @@ export async function runRenderJob(
       metadataPath = resolveInDataDir(path.posix.join("projects", project.id, "render", `${jobId}.ffmeta`));
       await writeFile(
         metadataPath,
-        toFfmetadata(resolveChapters(chapters, playableRanges), getEditedDuration(playableRanges), project.name),
+        toFfmetadata(
+          resolveProgramChapters(chapters, playableRanges, cardSlots),
+          getEditedDuration(playableRanges) + cardsDuration(cardSlots),
+          project.name
+        ),
         "utf-8"
       );
     }
@@ -268,8 +328,16 @@ export async function runRenderJob(
           audioFilter,
           metadataPath,
           reframe: clip && clipFrame ? { ...clipFrame, cropX: clip.cropX } : undefined,
+          frameRate: sourceStream!.fps,
+          program,
+          cardFrame,
+          padFrame,
+          broll:
+            sourceStream && brollOverlays.length > 0
+              ? { frame: { width: sourceStream.width, height: sourceStream.height }, overlays: brollOverlays }
+              : undefined,
         })
-      : buildAudioOnlyRenderArgs({ inputPath, outputPath, playableRanges, audioFilter, format, metadataPath });
+      : buildAudioOnlyRenderArgs({ inputPath, outputPath, playableRanges, program, audioFilter, format, metadataPath });
     await runFfmpeg(args);
 
     const stats = await statAsset(outputRelativePath);

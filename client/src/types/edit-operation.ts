@@ -1,32 +1,136 @@
+/**
+ * Fields every operation shares. `groupId` ties together ops created by one
+ * user action (e.g. applying a batch of suggested scenes) so undo/redo can
+ * treat them as a single step.
+ */
+type OperationBase = {
+  id: string;
+  createdAt: number;
+  groupId?: string;
+};
+
+/** Where a scene boundary came from -- shown in the UI, never changes behavior. */
+export type SplitSource = "manual" | "ai" | "shot";
+
 export type EditOperation =
-  | {
-      id: string;
+  | (OperationBase & {
       type: "cut";
       start: number;
       end: number;
       reason?: string;
-      createdAt: number;
-    }
-  | {
-      id: string;
+    })
+  | (OperationBase & {
       type: "trim";
       start: number;
       end: number;
-      createdAt: number;
-    }
-  | {
-      id: string;
+    })
+  | (OperationBase & {
+      /**
+       * A scene boundary in source time. Splits don't change what's
+       * rendered; they divide the episode into named scenes that cuts,
+       * cards and transitions attach to.
+       */
       type: "split";
       timestamp: number;
-      createdAt: number;
-    }
-  | {
-      id: string;
+      title?: string;
+      source?: SplitSource;
+    })
+  | (OperationBase & {
+      /**
+       * A full-screen title card inserted into the program -- time that
+       * isn't in the source. `at` is the source time it plays before:
+       * usually a scene boundary, 0 for an intro, or the source duration
+       * for an outro. See lib/timeline/program.ts for placement.
+       */
+      type: "card";
+      at: number;
+      /** Seconds on screen. */
+      duration: number;
+      template: CardTemplate;
+      title: string;
+      subtitle?: string;
+      /** '#RRGGBB' */
+      background: string;
+    })
+  | (OperationBase & {
+      /**
+       * How the scene starting at `at` is joined to what plays before it
+       * (its card, if it has one, included). At 0 it fades the episode in;
+       * at the source duration it fades the episode out. Transitions never
+       * change the program's length -- see lib/timeline/program.ts.
+       */
+      type: "transition";
+      at: number;
+      kind: TransitionKind;
+      /** Seconds for the whole transition (a dip spends half going out, half coming in). */
+      duration: number;
+    })
+  | (OperationBase & {
+      /**
+       * B-roll: an image or video from the project's media library shown
+       * over the footage from `start` to `end` (source time, so it follows
+       * cuts), full screen or picture-in-picture. The footage's audio keeps
+       * playing; the B-roll's own audio is not used.
+       */
+      type: "overlay";
+      assetId: string;
+      start: number;
+      end: number;
+      mode: OverlayMode;
+      /** Picture-in-picture only. */
+      corner?: OverlayCorner;
+      /** Seconds into a video asset to start from. */
+      offset?: number;
+    })
+  | (OperationBase & {
+      /**
+       * Frame padding for the scene starting at `at`: the footage is shrunk
+       * by `size`% of the frame on each side and centred on a solid border.
+       * The output size never changes; cards, B-roll, captions and the logo
+       * are unaffected. See lib/timeline/program.ts#placePads.
+       */
+      type: "pad";
+      at: number;
+      /** Border width as a percent of the frame, per side. */
+      size: number;
+      /** '#RRGGBB' */
+      color: string;
+    })
+  | (OperationBase & {
       type: "caption";
       text: string;
       start: number;
       end: number;
-      createdAt: number;
-    };
+    });
+
+export const CARD_TEMPLATES = ["title", "chapter", "quote", "outro"] as const;
+export type CardTemplate = (typeof CARD_TEMPLATES)[number];
+export const CARD_MIN_SECONDS = 1;
+export const CARD_MAX_SECONDS = 10;
+export const CARD_TITLE_MAX = 80;
+export const CARD_SUBTITLE_MAX = 120;
+
+/**
+ * dipBlack/dipWhite fade out to a color and back in; crossfade blends
+ * straight into or out of a title card (it needs a card: blending two
+ * stretches of footage that follow each other in the source shows nothing).
+ */
+export const TRANSITION_KINDS = ["dipBlack", "dipWhite", "crossfade"] as const;
+export type TransitionKind = (typeof TRANSITION_KINDS)[number];
+export const TRANSITION_MIN_SECONDS = 0.2;
+export const TRANSITION_MAX_SECONDS = 2;
+
+export const OVERLAY_MODES = ["full", "pip"] as const;
+export type OverlayMode = (typeof OVERLAY_MODES)[number];
+export const OVERLAY_CORNERS = ["top-left", "top-right", "bottom-left", "bottom-right"] as const;
+export type OverlayCorner = (typeof OVERLAY_CORNERS)[number];
+
+export const PAD_MIN_PERCENT = 2;
+export const PAD_MAX_PERCENT = 25;
 
 export type CutOperation = Extract<EditOperation, { type: "cut" }>;
+export type SplitOperation = Extract<EditOperation, { type: "split" }>;
+export type CardOperation = Extract<EditOperation, { type: "card" }>;
+export type TransitionOperation = Extract<EditOperation, { type: "transition" }>;
+export type OverlayOperation = Extract<EditOperation, { type: "overlay" }>;
+export type PadOperation = Extract<EditOperation, { type: "pad" }>;

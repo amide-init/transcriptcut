@@ -5,6 +5,7 @@ import { useProjectStore } from "@/stores/project-store";
 import { useTranscriptStore } from "@/stores/transcript-store";
 import { useTimelineStore } from "@/stores/timeline-store";
 import { useCaptionStyleStore } from "@/stores/caption-style-store";
+import { useMediaStore } from "@/stores/media-store";
 import { EditorLayout } from "@/components/editor/EditorLayout";
 import type { Transcript } from "@/types/transcript";
 import type { EditOperation } from "@/types/edit-operation";
@@ -44,12 +45,14 @@ export function EditorHydrator({
   const setTranscript = useTranscriptStore((s) => s.setTranscript);
   const hydrateTimeline = useTimelineStore((s) => s.hydrate);
   const hydrateCaptionStyle = useCaptionStyleStore((s) => s.hydrate);
+  const loadMedia = useMediaStore((s) => s.load);
 
   useEffect(() => {
     hydrateProject(project);
     setTranscript(transcript);
     hydrateTimeline(project.id, operations);
     hydrateCaptionStyle(project.id, project.burnInCaptions, project.captionStyle);
+    void loadMedia(project.id);
     // Only re-hydrate when navigating to a different project.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.id]);

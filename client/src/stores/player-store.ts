@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { CardOperation } from "@/types/edit-operation";
 
 type PlayerStore = {
   currentTime: number;
@@ -17,6 +18,14 @@ type PlayerStore = {
    * video that the exported file never had).
    */
   aspectRatio: number | null;
+  /**
+   * The title card on screen, and how far into it playback is. While a
+   * card shows, the <video> is paused on the frame after it and
+   * `isPlaying` means "the card's clock is running" (useCardPlayback.ts).
+   */
+  card: { id: string; elapsed: number } | null;
+  /** A card being edited in the Scenes panel, previewed over the player until the editor closes. */
+  cardDraft: CardOperation | null;
 
   setDuration: (duration: number) => void;
   setCurrentTime: (time: number) => void;
@@ -25,6 +34,8 @@ type PlayerStore = {
   clearSeekTarget: () => void;
   setVideoElement: (el: HTMLVideoElement | null) => void;
   setAspectRatio: (ratio: number | null) => void;
+  setCard: (card: { id: string; elapsed: number } | null) => void;
+  setCardDraft: (card: CardOperation | null) => void;
 };
 
 export const usePlayerStore = create<PlayerStore>((set) => ({
@@ -34,12 +45,17 @@ export const usePlayerStore = create<PlayerStore>((set) => ({
   seekTarget: null,
   videoElement: null,
   aspectRatio: null,
+  card: null,
+  cardDraft: null,
 
   setDuration: (duration) => set({ duration }),
   setCurrentTime: (time) => set({ currentTime: time }),
   setIsPlaying: (playing) => set({ isPlaying: playing }),
-  seek: (time) => set({ seekTarget: time }),
+  // Seeking anywhere leaves whatever card was showing.
+  seek: (time) => set({ seekTarget: time, card: null }),
   clearSeekTarget: () => set({ seekTarget: null }),
   setVideoElement: (videoElement) => set({ videoElement }),
   setAspectRatio: (aspectRatio) => set({ aspectRatio }),
+  setCard: (card) => set({ card }),
+  setCardDraft: (cardDraft) => set({ cardDraft }),
 }));

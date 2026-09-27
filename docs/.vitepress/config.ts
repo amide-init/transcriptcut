@@ -37,6 +37,7 @@ export default defineConfig({
             { text: "Architecture", link: "/guide/architecture" },
             { text: "Editing Workflow", link: "/guide/editing-workflow" },
             { text: "Podcast Workflow", link: "/guide/podcasting" },
+            { text: "Scenes, Cards & B-roll", link: "/guide/scenes" },
             { text: "AI-Assisted Editing", link: "/guide/ai-editing" },
             { text: "Security & Self-Hosting", link: "/guide/security" },
           ],

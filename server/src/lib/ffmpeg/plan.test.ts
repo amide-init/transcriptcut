@@ -8,9 +8,14 @@ const baseArgs = {
   outputPath: "/data/out.mp4",
   playableRanges: [{ start: 0, end: 10 }],
   filterId: "none",
+  frameRate: "30000/1001",
 };
 
 describe("buildRenderArgs: validation", () => {
+  it("rejects a frame rate that isn't a plain number or ratio", () => {
+    expect(() => buildRenderArgs({ ...baseArgs, frameRate: "30,drawtext=x" })).toThrow(/Invalid frame rate/);
+  });
+
   it("throws when the entire video has been cut (no playable ranges)", () => {
     expect(() => buildRenderArgs({ ...baseArgs, playableRanges: [] })).toThrow(/entire video has been cut/);
   });
@@ -52,7 +57,7 @@ describe("buildRenderArgs: basic structure", () => {
   it("trims a single range and maps it straight to [outv]/[outa]", () => {
     const argv = buildRenderArgs(baseArgs);
     const filterComplex = argv[argv.indexOf("-filter_complex") + 1];
-    expect(filterComplex).toContain("[0:v]trim=start=0.000:end=10.000,setpts=PTS-STARTPTS[v0]");
+    expect(filterComplex).toContain("[0:v]trim=start=0.000:end=10.000,setpts=PTS-STARTPTS,fps=30000/1001[v0]");
     expect(filterComplex).toContain("[0:a]atrim=start=0.000:end=10.000,asetpts=PTS-STARTPTS[a0]");
     expect(filterComplex).toContain("[v0]null[outv]");
     expect(filterComplex).toContain("[a0]anull[outa]");
@@ -67,8 +72,10 @@ describe("buildRenderArgs: basic structure", () => {
       ],
     });
     const filterComplex = argv[argv.indexOf("-filter_complex") + 1];
-    expect(filterComplex).toContain("[0:v]trim=start=0.000:end=3.000,setpts=PTS-STARTPTS[v0]");
-    expect(filterComplex).toContain("[0:v]trim=start=5.000:end=8.000,setpts=PTS-STARTPTS[v1]");
+    expect(filterComplex).toContain(
+      "[0:v]trim=start=0.000:end=3.000,setpts=PTS-STARTPTS,fps=30000/1001,tpad=stop_mode=clone:stop_duration=0.1[v0]"
+    );
+    expect(filterComplex).toContain("[0:v]trim=start=5.000:end=8.000,setpts=PTS-STARTPTS,fps=30000/1001[v1]");
     // Both 3s segments comfortably fit the default 0.03s crossfade: offset
     // is the first segment's own length (3.0) minus that 0.03s.
     expect(filterComplex).toContain("[v0][v1]xfade=transition=fade:duration=0.030:offset=2.970[outv]");
@@ -333,5 +340,294 @@ describe("reframe", () => {
       /Invalid reframe size/
     );
     expect(() => buildRenderArgs({ ...baseArgs, reframe: { width: 1080.5, height: 1920, cropX: 0.5 } })).toThrow();
+  });
+});
+
+describe("title cards", () => {
+  const card = {
+    id: "c1",
+    type: "card" as const,
+    at: 0,
+    duration: 3,
+    template: "title" as const,
+    title: "Welcome",
+    background: "#1e3a5f",
+    createdAt: 0,
+  };
+  const items = [
+    { kind: "card" as const, card },
+    { kind: "source" as const, start: 0, end: 10 },
+    { kind: "source" as const, start: 20, end: 30 },
+  ];
+  const cuts = [{ kind: "cut" as const }, { kind: "cut" as const }];
+  const program = { items, joins: cuts, fadeIn: null, fadeOut: null };
+  const cardFrame = { width: 1920, height: 1080, textPath: "/data/cards.ass" };
+  const graph = (extra: Partial<Parameters<typeof buildRenderArgs>[0]> = {}) => {
+    const args = buildRenderArgs({ ...baseArgs, program, cardFrame, ...extra });
+    return args[args.indexOf("-filter_complex") + 1];
+  };
+
+  it("generates each card as a solid-color segment at the source's size and frame rate", () => {
+    expect(graph()).toContain(
+      "color=c=0x1E3A5F:s=1920x1080:r=30000/1001:d=3.000,format=yuv420p,setsar=1,tpad=stop_mode=clone:stop_duration=0.1[v0]"
+    );
+  });
+
+  it("normalizes source segments so they can join the cards", () => {
+    expect(graph()).toContain(
+      "[0:v]trim=start=0.000:end=10.000,setpts=PTS-STARTPTS,fps=30000/1001,format=yuv420p,setsar=1,tpad=stop_mode=clone:stop_duration=0.1[v1]"
+    );
+  });
+
+  it("offsets each join by the durations before it, cards included", () => {
+    const g = graph();
+    expect(g).toContain("[v0][v1]xfade=transition=fade:duration=0.030:offset=2.970[vx1]");
+    expect(g).toContain("[vx1][v2]xfade=transition=fade:duration=0.030:offset=12.940[outv]");
+  });
+
+  it("gives cards silence in a shared audio format", () => {
+    const g = graph();
+    expect(g).toContain(
+      "anullsrc=r=48000:cl=stereo,atrim=duration=3.000,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo[a0]"
+    );
+    expect(g).toContain(
+      "[0:a]atrim=start=0.000:end=10.000,asetpts=PTS-STARTPTS,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo[a1]"
+    );
+  });
+
+  it("grades only the footage, then burns card text in before captions", () => {
+    const g = graph({
+      filterId: "bw",
+      srtPath: "/data/subs.srt",
+      captionStyle: DEFAULT_CAPTION_STYLE,
+      videoHeight: 1080,
+      videoWidth: 1920,
+    });
+    expect(g).not.toContain("[outv]hue");
+    expect(g).toContain("[0:v]trim=start=0.000:end=10.000,setpts=PTS-STARTPTS,hue=s=0");
+    expect(g.split(";").find((chain) => chain.startsWith("color="))).not.toContain("hue");
+    expect(g.indexOf("subtitles=filename='/data/cards.ass'[carded]")).toBeLessThan(
+      g.indexOf("subtitles=filename='/data/subs.srt'")
+    );
+    expect(g).toMatch(/\[carded\]subtitles=filename='\/data\/subs\.srt'/);
+  });
+
+  it("refuses cards without the frame to generate them at, and bad values", () => {
+    expect(() => buildRenderArgs({ ...baseArgs, program })).toThrow(/frame size/);
+    expect(() => buildRenderArgs({ ...baseArgs, program, cardFrame: { ...cardFrame, width: 0 } })).toThrow(
+      /frame size/
+    );
+    const badColor = { ...program, items: [{ kind: "card" as const, card: { ...card, background: "red" } }, items[1], items[2]] };
+    expect(() => buildRenderArgs({ ...baseArgs, program: badColor, cardFrame })).toThrow(/background color/);
+  });
+
+  it("adds card silence to audio-only exports", () => {
+    const args = buildAudioOnlyRenderArgs({ ...baseArgs, program, format: "mp3" });
+    expect(args[args.indexOf("-filter_complex") + 1]).toContain("anullsrc=r=48000:cl=stereo,atrim=duration=3.000");
+  });
+});
+
+describe("transitions", () => {
+  const card = {
+    id: "c1",
+    type: "card" as const,
+    at: 10,
+    duration: 3,
+    template: "title" as const,
+    title: "Part 2",
+    background: "#111418",
+    createdAt: 0,
+  };
+  const footage = [
+    { kind: "source" as const, start: 0, end: 10 },
+    { kind: "source" as const, start: 10, end: 20 },
+  ];
+  const graphOf = (args: string[]) => args[args.indexOf("-filter_complex") + 1];
+
+  it("dips by fading each side's own edge, keeping the usual join and timing", () => {
+    const g = graphOf(
+      buildRenderArgs({
+        ...baseArgs,
+        program: { items: footage, joins: [{ kind: "dip", color: "white", seconds: 1 }], fadeIn: null, fadeOut: null },
+      })
+    );
+    expect(g).toContain("fps=30000/1001,fade=t=out:st=9.500:d=0.500:color=white,tpad=");
+    expect(g).toContain("fps=30000/1001,fade=t=in:st=0:d=0.500:color=white[v1]");
+    expect(g).toContain("[v0][v1]xfade=transition=fade:duration=0.030:offset=9.970[outv]");
+    expect(g).toContain("asetpts=PTS-STARTPTS,afade=t=out:st=9.700:d=0.300[a0]");
+    expect(g).toContain("asetpts=PTS-STARTPTS,afade=t=in:st=0:d=0.300[a1]");
+  });
+
+  it("crossfades into and out of a card by growing the card, so the footage keeps its timing", () => {
+    const g = graphOf(
+      buildRenderArgs({
+        ...baseArgs,
+        cardFrame: { width: 1920, height: 1080, textPath: "/data/cards.ass" },
+        program: {
+          items: [footage[0], { kind: "card" as const, card }, footage[1]],
+          joins: [
+            { kind: "crossfade", seconds: 0.8 },
+            { kind: "crossfade", seconds: 0.8 },
+          ],
+          fadeIn: null,
+          fadeOut: null,
+        },
+      })
+    );
+    // 3s card + 0.8s blended in on each side.
+    expect(g).toContain(":d=4.600,format=yuv420p,setsar=1,tpad=");
+    expect(g).toContain("[v0][v1]xfade=transition=fade:duration=0.800:offset=9.200[vx1]");
+    // The footage after the card starts 13s in, exactly as without the blend.
+    expect(g).toContain("[vx1][v2]xfade=transition=fade:duration=0.800:offset=13.000[outv]");
+    expect(g).toContain("anullsrc=r=48000:cl=stereo,atrim=duration=4.600");
+    expect(g).toContain("[a0][a1]acrossfade=d=0.800[ax1]");
+  });
+
+  it("fades the episode in from and out to a color", () => {
+    const g = graphOf(
+      buildRenderArgs({
+        ...baseArgs,
+        program: {
+          items: footage,
+          joins: [{ kind: "cut" }],
+          fadeIn: { color: "black", seconds: 1.5 },
+          fadeOut: { color: "black", seconds: 2 },
+        },
+      })
+    );
+    expect(g).toContain("fade=t=in:st=0:d=1.500:color=black");
+    expect(g).toContain("fade=t=out:st=8.000:d=2.000:color=black[v1]");
+    expect(g).toContain("afade=t=in:st=0:d=1.000");
+    expect(g).toContain("afade=t=out:st=9.000:d=1.000[a1]");
+  });
+
+  it("never lets a transition take more than half of a short segment", () => {
+    const g = graphOf(
+      buildRenderArgs({
+        ...baseArgs,
+        program: {
+          items: [{ kind: "source" as const, start: 0, end: 0.6 }, footage[1]],
+          joins: [{ kind: "dip", color: "black", seconds: 2 }],
+          fadeIn: null,
+          fadeOut: null,
+        },
+      })
+    );
+    expect(g).toContain("fade=t=out:st=0.300:d=0.300:color=black");
+  });
+
+  it("refuses a program whose joins don't match its items", () => {
+    expect(() =>
+      buildRenderArgs({ ...baseArgs, program: { items: footage, joins: [], fadeIn: null, fadeOut: null } })
+    ).toThrow(/joins/);
+  });
+});
+
+describe("scene padding", () => {
+  const items = [
+    { kind: "source" as const, start: 0, end: 10 },
+    { kind: "source" as const, start: 10, end: 20, pad: { scale: 0.8, color: "#ff0000" } },
+  ];
+  const program = { items, joins: [{ kind: "cut" as const }], fadeIn: null, fadeOut: null };
+  const padFrame = { width: 1920, height: 1080 };
+  const graph = (extra: Partial<Parameters<typeof buildRenderArgs>[0]> = {}) => {
+    const args = buildRenderArgs({ ...baseArgs, program, padFrame, ...extra });
+    return args[args.indexOf("-filter_complex") + 1];
+  };
+
+  it("shrinks a padded scene and pads it back out to the source's size", () => {
+    expect(graph()).toContain(
+      "[0:v]trim=start=10.000:end=20.000" +
+        ",setpts=PTS-STARTPTS,fps=30000/1001,format=yuv420p,setsar=1,scale=1536:864,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=0xFF0000,setsar=1[v1]"
+    );
+  });
+
+  it("leaves unpadded scenes at full frame and grades per segment so the border keeps its color", () => {
+    const g = graph({ filterId: "bw" });
+    expect(g).toContain("[0:v]trim=start=0.000:end=10.000,setpts=PTS-STARTPTS,hue=s=0");
+    expect(g.split(";").find((chain) => chain.endsWith("[v0]"))).not.toContain(",pad=");
+    expect(g).not.toContain("[outv]hue");
+  });
+
+  it("refuses padding without the frame size, and bad values", () => {
+    expect(() => buildRenderArgs({ ...baseArgs, program })).toThrow(/frame size/);
+    const bad = (pad: { scale: number; color: string }) => ({
+      ...program,
+      items: [items[0], { ...items[1], pad }],
+    });
+    expect(() => buildRenderArgs({ ...baseArgs, program: bad({ scale: 0.8, color: "red" }), padFrame })).toThrow(
+      /padding color/
+    );
+    expect(() => buildRenderArgs({ ...baseArgs, program: bad({ scale: 1.2, color: "#ff0000" }), padFrame })).toThrow(
+      /padding size/
+    );
+  });
+});
+
+describe("B-roll", () => {
+  const frame = { width: 1920, height: 1080 };
+  const video = {
+    path: "/data/media/clip.mp4",
+    image: false,
+    start: 12,
+    end: 17,
+    offset: 2,
+    mode: "full" as const,
+    corner: "top-right" as const,
+  };
+  const image = { ...video, path: "/data/media/photo.png", image: true, mode: "pip" as const, start: 30, end: 34 };
+  const render = (extra: Partial<Parameters<typeof buildRenderArgs>[0]> = {}) =>
+    buildRenderArgs({ ...baseArgs, broll: { frame, overlays: [video, image] }, ...extra });
+  const graphOf = (args: string[]) => args[args.indexOf("-filter_complex") + 1];
+
+  it("adds each file as an input after the source, looping images for their slot", () => {
+    const args = render();
+    expect(args.slice(0, 11)).toEqual([
+      "-y",
+      "-i",
+      "/data/in.mp4",
+      "-i",
+      "/data/media/clip.mp4",
+      "-loop",
+      "1",
+      "-t",
+      "4.500",
+      "-i",
+      "/data/media/photo.png",
+    ]);
+  });
+
+  it("trims video B-roll from its offset, holds its last frame, and fills the frame when full screen", () => {
+    expect(graphOf(render())).toContain(
+      "[1:v]trim=start=2.000:duration=5.000,setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=5.000,scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,setsar=1,setpts=PTS-STARTPTS+12.000/TB[broll0]"
+    );
+  });
+
+  it("shows each piece only in its slot, picture-in-picture in its corner", () => {
+    const g = graphOf(render());
+    expect(g).toContain("[outv][broll0]overlay=x=0:y=0:enable='between(t,12.000,17.000)':eof_action=pass[brolled0]");
+    expect(g).toContain("[2:v]scale=614:-2,setsar=1,setpts=PTS-STARTPTS+30.000/TB[broll1]");
+    expect(g).toContain(
+      "[brolled0][broll1]overlay=x=main_w-overlay_w-44:y=44:enable='between(t,30.000,34.000)':eof_action=pass[brolled1]"
+    );
+  });
+
+  it("shifts the logo and metadata inputs past the B-roll", () => {
+    const args = render({
+      logoPath: "/data/logo.png",
+      logoPosition: "bottom-right",
+      videoWidth: 1920,
+      videoHeight: 1080,
+      metadataPath: "/data/meta.ffmeta",
+    });
+    expect(graphOf(args)).toContain("[3:v]format=rgba");
+    expect(args[args.indexOf("-map_metadata") + 1]).toBe("4");
+  });
+
+  it("refuses bad timing or modes", () => {
+    expect(() => buildRenderArgs({ ...baseArgs, broll: { frame, overlays: [{ ...video, end: 12 }] } })).toThrow(/timing/);
+    expect(() =>
+      buildRenderArgs({ ...baseArgs, broll: { frame, overlays: [{ ...video, mode: "zoom" as "full" }] } })
+    ).toThrow(/mode/);
   });
 });

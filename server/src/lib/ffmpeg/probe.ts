@@ -17,7 +17,18 @@ export class FfprobeNotFoundError extends Error {
  * The binary defaults to `ffprobe` on PATH, overridable with FFPROBE_PATH --
  * mirrors FFMPEG_PATH in ffmpeg/run.ts.
  */
-export function probeVideoDimensions(inputPath: string): Promise<{ width: number; height: number }> {
+export async function probeVideoDimensions(inputPath: string): Promise<{ width: number; height: number }> {
+  const { width, height } = await probeVideoStream(inputPath);
+  return { width, height };
+}
+
+/**
+ * Width, height and frame rate of the first video stream. The rate is
+ * ffprobe's r_frame_rate as a rational string ("30000/1001"), passed to
+ * ffmpeg as-is so every segment of a render runs at exactly the source's
+ * rate (lib/ffmpeg/plan.ts).
+ */
+export function probeVideoStream(inputPath: string): Promise<{ width: number; height: number; fps: string }> {
   const binary = process.env.FFPROBE_PATH || "ffprobe";
   const args = [
     "-v",
@@ -25,7 +36,7 @@ export function probeVideoDimensions(inputPath: string): Promise<{ width: number
     "-select_streams",
     "v:0",
     "-show_entries",
-    "stream=width,height",
+    "stream=width,height,r_frame_rate",
     "-of",
     "json",
     inputPath,
@@ -44,18 +55,28 @@ export function probeVideoDimensions(inputPath: string): Promise<{ width: number
         return;
       }
       try {
-        const parsed = JSON.parse(stdout) as { streams?: { width?: number; height?: number }[] };
+        const parsed = JSON.parse(stdout) as {
+          streams?: { width?: number; height?: number; r_frame_rate?: string }[];
+        };
         const stream = parsed.streams?.[0];
         if (!stream?.width || !stream?.height) {
           reject(new Error(`ffprobe returned no video stream dimensions for ${inputPath}.`));
           return;
         }
-        resolve({ width: stream.width, height: stream.height });
+        resolve({ width: stream.width, height: stream.height, fps: normalizeFrameRate(stream.r_frame_rate) });
       } catch {
         reject(new Error(`Could not parse ffprobe output for ${inputPath}.`));
       }
     });
   });
+}
+
+/** A usable "num/den" rate, or 30 when ffprobe reports none (or 0/0, as it does for some still images). */
+export function normalizeFrameRate(rate: string | undefined): string {
+  const match = rate?.match(/^(\d{1,6})\/(\d{1,6})$/);
+  if (!match || Number(match[1]) === 0 || Number(match[2]) === 0) return "30";
+  const fps = Number(match[1]) / Number(match[2]);
+  return fps > 0 && fps <= 240 ? `${match[1]}/${match[2]}` : "30";
 }
 
 /**

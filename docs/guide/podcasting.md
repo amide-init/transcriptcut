@@ -53,7 +53,15 @@ in chunks. On a 14-minute synthetic 3-voice test conversation it
 labeled **99.9%** of words correctly. Two very similar voices can end up merged into one speaker;
 fix those by renaming, or by relabeling individual segments.
 
-## 4. Make it sound like a podcast
+## 4. Shape it into scenes
+
+Split the episode at each topic change, or let **Suggest scenes** propose
+the splits (optionally lined up with camera cuts from **Find** shot
+changes) and review them. Then give scenes title cards and transitions,
+and cover long talking stretches with B-roll from the **Media** tab. See
+[Scenes, Cards & B-roll](/guide/scenes).
+
+## 5. Make it sound like a podcast
 
 Open the **Audio** tab and click **Make podcast-ready**, or pick settings
 yourself:
@@ -70,7 +78,7 @@ playhead** renders a short **before / after** sample to listen to. The
 settings are applied when you export. Everything is off by default, so
 projects that don't use it export exactly as before.
 
-## 5. Publish
+## 6. Publish
 
 The **Publish** tab prepares everything around the episode:
 
@@ -94,7 +102,7 @@ Chapters are stored against the original recording, so cuts you make
 after generating them don't break them: a chapter whose moment you cut
 moves to the next surviving moment.
 
-## 6. Make Shorts
+## 7. Make Shorts
 
 The **Clips** tab turns the episode into short vertical clips:
 
@@ -122,10 +130,10 @@ key, and each one is a button you press:
 | --- | --- |
 | Transcription | `whisper-1` (OpenAI lists it at $0.006 per minute, about $0.36 per hour of audio) |
 | Speaker detection | `gpt-4o-transcribe-diarize` |
-| Chapters, show notes | `gpt-4o-mini` |
+| Chapters, show notes, scene suggestions | `gpt-4o-mini` |
 | Find highlights | `gpt-5.6-luna` |
 
 Costs for the other steps depend on episode length and current OpenAI
 pricing. Your OpenAI usage dashboard shows exactly what each run cost.
-Audio cleanup, rendering, captions and exports run locally with FFmpeg
-and cost nothing.
+Audio cleanup, shot-change detection, rendering, captions and exports run
+locally with FFmpeg and cost nothing.

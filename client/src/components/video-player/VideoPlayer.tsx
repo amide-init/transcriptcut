@@ -3,26 +3,24 @@
 import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { Maximize, Minimize, Pause, Play, Volume2, VolumeX } from "lucide-react";
 import { usePlayerStore } from "@/stores/player-store";
-import { useTimelineStore } from "@/stores/timeline-store";
 import { useTranscriptStore } from "@/stores/transcript-store";
 import { useProjectStore } from "@/stores/project-store";
 import { useCaptionStyleStore } from "@/stores/caption-style-store";
 import { CAPTION_MARGIN_V_PERCENT, type CaptionPosition } from "@/lib/captions/style";
-import {
-  computePlayableRanges,
-  editedTimeToSourceTime,
-  getEditedDuration,
-  isCut,
-  nextPlayableTime,
-  sourceTimeToEditedTime,
-} from "@/lib/timeline/cuts";
+import { editedTimeToSourceTime, isCut, nextPlayableTime, sourceTimeToEditedTime } from "@/lib/timeline/cuts";
+import { locateProgramTime } from "@/lib/timeline/program";
+import { programPlayhead, useProgram } from "@/lib/timeline/useProgram";
+import { useCardPlayback } from "@/components/video-player/useCardPlayback";
+import { CardPreview } from "@/components/video-player/CardPreview";
+import { PaddingLayer } from "@/components/video-player/PaddingLayer";
+import { TransitionOverlay } from "@/components/video-player/TransitionOverlay";
+import { BrollLayer } from "@/components/video-player/BrollLayer";
 import { generateCaptions } from "@/lib/captions/generate";
 import { formatTimecode } from "@/lib/timeline/format";
 import { getFilterPreset } from "@/lib/video/filters";
 import { buildPropertiesCss, buildPropertiesSvgValues } from "@/lib/video/properties";
 import { logoPositionToCss } from "@/lib/video/logo";
 import { CropOverlay } from "@/components/video-player/CropOverlay";
-import type { CutOperation } from "@/types/edit-operation";
 
 /**
  * Approximates libass's numpad-alignment vertical placement (see
@@ -96,13 +94,20 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
     }
   };
 
-  const operations = useTimelineStore((s) => s.operations);
-  const cuts = operations.filter((op): op is CutOperation => op.type === "cut");
-  const playableRanges = computePlayableRanges(duration, cuts);
-  const editedDuration = getEditedDuration(playableRanges);
+  const program = useProgram();
+  const { cuts, ranges: playableRanges, editedDuration } = program;
   const editedCurrentTime =
     editedDuration > 0 ? sourceTimeToEditedTime(currentTime, playableRanges) : 0;
-  const playheadPosition = editedDuration > 0 ? (editedCurrentTime / editedDuration) * 100 : 0;
+
+  // Title cards: the player shows them over a paused video (useCardPlayback),
+  // and the scrubber/timecode run on program time, cards included.
+  const card = usePlayerStore((s) => s.card);
+  const setCard = usePlayerStore((s) => s.setCard);
+  const cardDraft = usePlayerStore((s) => s.cardDraft);
+  const activeCard = card ? program.slots.find((s) => s.card.id === card.id)?.card : undefined;
+  const cardPlayback = useCardPlayback(videoRef, program);
+  const programTime = programPlayhead(program, currentTime, card);
+  const playheadPosition = program.duration > 0 ? (programTime / program.duration) * 100 : 0;
 
   const transcript = useTranscriptStore((s) => s.transcript);
   const captionCues = transcript && duration > 0 ? generateCaptions(transcript, cuts, duration) : [];
@@ -115,23 +120,31 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
   const togglePlay = () => {
     const video = videoRef.current;
     if (!video) return;
+    if (cardPlayback.togglePlay()) return;
     if (video.paused) video.play();
     else video.pause();
   };
 
   const handleScrubberClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!scrubberRef.current || editedDuration <= 0) return;
+    if (!scrubberRef.current || program.duration <= 0) return;
     const rect = scrubberRef.current.getBoundingClientRect();
     const ratio = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1);
-    seek(editedTimeToSourceTime(ratio * editedDuration, playableRanges));
+    const target = locateProgramTime(ratio * program.duration, program.slots);
+    if (target.card) {
+      seek(target.card.resumeAt);
+      setCard({ id: target.card.card.id, elapsed: target.cardOffset });
+    } else {
+      seek(editedTimeToSourceTime(target.editedTime, playableRanges));
+    }
   };
 
   // Handle imperative seeks requested elsewhere (transcript click, timeline click).
   useEffect(() => {
     if (seekTarget === null || !videoRef.current) return;
     videoRef.current.currentTime = seekTarget;
+    cardPlayback.noteSeek(seekTarget);
     clearSeekTarget();
-  }, [seekTarget, clearSeekTarget]);
+  }, [seekTarget, clearSeekTarget, cardPlayback]);
 
   // A blob-URL video can reach readyState >= HAVE_METADATA (and fire its
   // loadedmetadata event) before React finishes attaching the listener on
@@ -213,11 +226,13 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
       if (playableRanges.length > 0 && isCut(metadata.mediaTime, playableRanges)) {
         const next = nextPlayableTime(metadata.mediaTime, playableRanges);
         if (next === null) {
-          video.pause();
+          if (!cardPlayback.handleEnd()) video.pause();
         } else {
           pendingSeekTarget = next;
           video.currentTime = next;
         }
+      } else {
+        cardPlayback.handleFrame(metadata.mediaTime, video.paused);
       }
       handle = video.requestVideoFrameCallback(onFrame);
     };
@@ -226,7 +241,7 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
     return () => {
       if (handle !== null) video.cancelVideoFrameCallback(handle);
     };
-  }, [playableRanges]);
+  }, [playableRanges, cardPlayback]);
 
   const supportsVideoFrameCallback =
     typeof HTMLVideoElement !== "undefined" && "requestVideoFrameCallback" in HTMLVideoElement.prototype;
@@ -242,10 +257,12 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
     if (isCut(video.currentTime, playableRanges)) {
       const next = nextPlayableTime(video.currentTime, playableRanges);
       if (next === null) {
-        video.pause();
+        if (!cardPlayback.handleEnd()) video.pause();
       } else {
         video.currentTime = next;
       }
+    } else {
+      cardPlayback.handleFrame(video.currentTime, video.paused);
     }
   };
 
@@ -282,18 +299,31 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
         the same way ffmpeg's PlayResY does for the export (GitHub #22).
       */}
       <div className="relative min-h-0 flex-1 overflow-hidden [container-type:size]">
+        <PaddingLayer videoRef={videoRef} program={program} />
         <video
           ref={videoRef}
           src={videoUrl}
-          className="h-full w-full object-contain"
+          className="relative h-full w-full object-contain"
           style={{ filter: filterCss }}
           onLoadedMetadata={(e) => handleDurationKnown(e.currentTarget)}
           onTimeUpdate={handleTimeUpdate}
           onPlay={() => setIsPlaying(true)}
-          onPause={() => setIsPlaying(false)}
+          onPause={() => {
+            if (cardPlayback.ignorePauseRef.current) {
+              cardPlayback.ignorePauseRef.current = false;
+              return;
+            }
+            setIsPlaying(false);
+          }}
+          onEnded={() => cardPlayback.handleEnd()}
           data-playing={isPlaying}
         />
         <CropOverlay />
+        {/* B-roll, cards and transitions sit under the logo and captions, like the export. */}
+        <BrollLayer videoRef={videoRef} program={program} />
+        {activeCard && <CardPreview card={activeCard} elapsed={card?.elapsed} />}
+        <TransitionOverlay videoRef={videoRef} program={program} />
+        {cardDraft && <CardPreview card={cardDraft} />}
         {logoUrl && (
           <img
             src={logoUrl}
@@ -303,7 +333,7 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
             style={logoPositionToCss(logoPosition, logoPaddingX, logoPaddingY, logoOpacity)}
           />
         )}
-        {burnInCaptions && activeCue && (
+        {burnInCaptions && activeCue && !activeCard && !cardDraft && (
           <div
             className="pointer-events-none absolute inset-x-0 flex justify-center px-4"
             style={CAPTION_VERTICAL_STYLE[captionStyle.position]}
@@ -344,7 +374,7 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
         <button
           type="button"
           onClick={togglePlay}
-          disabled={editedDuration <= 0}
+          disabled={program.duration <= 0}
           className="flex size-6 shrink-0 items-center justify-center rounded text-white hover:bg-white/10 disabled:pointer-events-none disabled:opacity-50"
         >
           {isPlaying ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
@@ -360,7 +390,7 @@ export function VideoPlayer({ videoUrl }: { videoUrl: string }) {
           />
         </div>
         <span className="font-mono text-xs tabular-nums text-white/70">
-          {formatTimecode(editedCurrentTime)} / {formatTimecode(editedDuration)}
+          {formatTimecode(programTime)} / {formatTimecode(program.duration)}
         </span>
         <button
           type="button"

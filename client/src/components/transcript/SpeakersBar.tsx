@@ -112,7 +112,7 @@ export function SpeakersBar() {
   const transcript = useTranscriptStore((s) => s.transcript);
   const setTranscript = useTranscriptStore((s) => s.setTranscript);
   const operations = useTimelineStore((s) => s.operations);
-  const addCut = useTimelineStore((s) => s.addCut);
+  const addCuts = useTimelineStore((s) => s.addCuts);
   const removeOperations = useTimelineStore((s) => s.removeOperations);
 
   const [job, setJob] = useState<Job | null>(null);
@@ -197,11 +197,14 @@ export function SpeakersBar() {
   const segmentsOf = (name: string) => transcript.segments.filter((s) => s.speaker === name && s.words.length > 0);
 
   const cutAll = (name: string) => {
-    for (const segment of segmentsOf(name)) {
-      if (isFullyCut(segment.words, cuts)) continue;
-      const { start, end } = wordSpanBounds(segment.words, { start: segment.start, end: segment.end });
-      addCut(padCutStart(start, allWords), end, `speaker: ${name}`);
-    }
+    addCuts(
+      segmentsOf(name)
+        .filter((segment) => !isFullyCut(segment.words, cuts))
+        .map((segment) => {
+          const { start, end } = wordSpanBounds(segment.words, { start: segment.start, end: segment.end });
+          return { start: padCutStart(start, allWords), end, reason: `speaker: ${name}` };
+        })
+    );
   };
 
   const restoreAll = (name: string) => {

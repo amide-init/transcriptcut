@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { prisma } from "@/lib/db/client";
 import { errorResponse } from "@/lib/http";
+import { TRANSCRIPT_JOB_KINDS } from "@/lib/jobs";
 import { runDiarizationJob } from "@/lib/ai/diarization-job";
 import type { Transcript } from "@/types/transcript";
 
@@ -21,7 +22,8 @@ speakersRoute.post("/:id/speakers/detect", async (c) => {
   }
   // Transcription and speaker detection both rewrite the transcript -- never run them concurrently.
   const running = await prisma.transcriptionJob.findFirst({
-    where: { projectId: id, status: { in: ["queued", "processing"] } },
+    // Only jobs that rewrite the transcript conflict; shot detection only reads the video.
+    where: { projectId: id, kind: { in: TRANSCRIPT_JOB_KINDS }, status: { in: ["queued", "processing"] } },
   });
   if (running) {
     return errorResponse(c, "ALREADY_RUNNING", "This project's transcript is already being processed.", 409);

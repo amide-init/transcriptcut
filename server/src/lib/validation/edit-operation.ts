@@ -1,4 +1,31 @@
 import { z } from "zod";
+import {
+  CARD_MAX_SECONDS,
+  CARD_MIN_SECONDS,
+  CARD_SUBTITLE_MAX,
+  CARD_TEMPLATES,
+  CARD_TITLE_MAX,
+  OVERLAY_CORNERS,
+  OVERLAY_MODES,
+  PAD_MAX_PERCENT,
+  PAD_MIN_PERCENT,
+  TRANSITION_KINDS,
+  TRANSITION_MAX_SECONDS,
+  TRANSITION_MIN_SECONDS,
+} from "@/types/edit-operation";
+
+/**
+ * Card text is burned in through a generated ASS file: braces and
+ * backslashes would be read as override tags, and control characters or
+ * newlines would break the event line. The client strips these before
+ * sending; the server refuses anything that slips through.
+ */
+const cardText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .refine((s) => !/[{}\\\u0000-\u001f\u007f]/.test(s), "Card text can't contain braces, backslashes or line breaks.");
 
 /**
  * Mirrors the EditOperation union in types/edit-operation.ts. The client
@@ -15,6 +42,7 @@ export const editOperationSchema = z.discriminatedUnion("type", [
     end: z.number().nonnegative(),
     reason: z.string().max(500).optional(),
     createdAt: z.number(),
+    groupId: z.string().min(1).max(100).optional(),
   }),
   z.object({
     id: z.string().min(1),
@@ -22,12 +50,58 @@ export const editOperationSchema = z.discriminatedUnion("type", [
     start: z.number().nonnegative(),
     end: z.number().nonnegative(),
     createdAt: z.number(),
+    groupId: z.string().min(1).max(100).optional(),
   }),
   z.object({
     id: z.string().min(1),
     type: z.literal("split"),
     timestamp: z.number().nonnegative(),
+    title: z.string().trim().max(80).optional(),
+    source: z.enum(["manual", "ai", "shot"]).optional(),
     createdAt: z.number(),
+    groupId: z.string().min(1).max(100).optional(),
+  }),
+  z.object({
+    id: z.string().min(1),
+    type: z.literal("card"),
+    at: z.number().nonnegative(),
+    duration: z.number().min(CARD_MIN_SECONDS).max(CARD_MAX_SECONDS),
+    template: z.enum(CARD_TEMPLATES),
+    title: cardText(CARD_TITLE_MAX).pipe(z.string().min(1)),
+    subtitle: cardText(CARD_SUBTITLE_MAX).optional(),
+    background: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+    createdAt: z.number(),
+    groupId: z.string().min(1).max(100).optional(),
+  }),
+  z.object({
+    id: z.string().min(1),
+    type: z.literal("transition"),
+    at: z.number().nonnegative(),
+    kind: z.enum(TRANSITION_KINDS),
+    duration: z.number().min(TRANSITION_MIN_SECONDS).max(TRANSITION_MAX_SECONDS),
+    createdAt: z.number(),
+    groupId: z.string().min(1).max(100).optional(),
+  }),
+  z.object({
+    id: z.string().min(1),
+    type: z.literal("overlay"),
+    assetId: z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/),
+    start: z.number().nonnegative(),
+    end: z.number().nonnegative(),
+    mode: z.enum(OVERLAY_MODES),
+    corner: z.enum(OVERLAY_CORNERS).optional(),
+    offset: z.number().nonnegative().optional(),
+    createdAt: z.number(),
+    groupId: z.string().min(1).max(100).optional(),
+  }),
+  z.object({
+    id: z.string().min(1),
+    type: z.literal("pad"),
+    at: z.number().nonnegative(),
+    size: z.number().min(PAD_MIN_PERCENT).max(PAD_MAX_PERCENT),
+    color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+    createdAt: z.number(),
+    groupId: z.string().min(1).max(100).optional(),
   }),
   z.object({
     id: z.string().min(1),
@@ -36,5 +110,6 @@ export const editOperationSchema = z.discriminatedUnion("type", [
     start: z.number().nonnegative(),
     end: z.number().nonnegative(),
     createdAt: z.number(),
+    groupId: z.string().min(1).max(100).optional(),
   }),
 ]);

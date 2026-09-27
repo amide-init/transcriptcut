@@ -8,6 +8,7 @@ import {
   type ResolvedChapter,
 } from "@/types/publishing";
 import type { PlayableRange } from "@/types/timeline";
+import { editedToProgramTime, type CardSlot } from "@/lib/timeline/program";
 
 /**
  * Chapter rules shared by AI output and user edits. Pure functions only, so
@@ -93,6 +94,22 @@ export function resolveChapters(chapters: Chapter[], ranges: PlayableRange[]): R
     resolved.push({ ...c, start });
   }
   return resolved;
+}
+
+/**
+ * resolveChapters, then onto the program timeline around any title cards.
+ * A chapter starting where a card plays starts with that card, so the
+ * marker shows the card rather than jumping past it.
+ */
+export function resolveProgramChapters(
+  chapters: Chapter[],
+  ranges: PlayableRange[],
+  slots: CardSlot[]
+): ResolvedChapter[] {
+  return resolveChapters(chapters, ranges).map((c) => ({
+    ...c,
+    start: c.start === 0 ? 0 : editedToProgramTime(c.start, slots, { includeCardsAtPoint: false }),
+  }));
 }
 
 /** "00:00 Intro" lines for a YouTube description or show notes. */

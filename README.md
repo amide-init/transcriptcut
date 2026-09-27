@@ -58,6 +58,22 @@ For podcasts:
   transcript selection; render 9:16 / 1:1 / 16:9 with a positionable crop
   and big word-by-word captions.
 
+Shaping the episode:
+
+- **Scenes** — split at the playhead (**S**) or before any sentence, then
+  name, cut or merge whole scenes. **Suggest scenes** proposes topic
+  changes for review, landed on detected camera cuts; or build scenes
+  from your chapters.
+- **Title cards** — intro, chapter, quote and outro cards between scenes,
+  previewed live and rendered into the export.
+- **Transitions** — dip to black/white, crossfade into a card, and fades
+  in and out of the episode, without shifting anything's timing.
+- **B-roll** — upload images and clips, then cover a transcript selection
+  full screen or picture-in-picture.
+
+Every edit, including bulk ones like "remove all filler words" or applying
+suggested scenes, is a single undo step (**⌘Z** / **⇧⌘Z**).
+
 AI models only ever return text and sentence picks, never timestamps or
 edits: times always come from the transcript's own word timestamps, and
 every response is validated before use. See the

@@ -634,6 +634,91 @@ it; `plan.ts` then crops/scales to the clip frame, and captions are
 re-cut into 3-4 word Shorts cues laid out for that frame (the ASS script
 resolution must match the output aspect, or libass stretches glyphs).
 
+## Scenes and title cards
+
+Scenes are derived, never stored: the ranges between `split` operations
+(`lib/timeline/scenes.ts`); a split at exactly 0 only names the first
+scene. New splits snap to the middle of a gap between words.
+
+A `card` operation inserts a full-screen title card (template, title,
+subtitle, 1-10s, solid color) before the content at its source time `at`
+-- a scene start, 0 for an intro, the duration for an outro. Cards add
+time that isn't in the source, so there are three clocks: source, edited
+(cuts removed, `cuts.ts`) and **program** (edited plus cards,
+`lib/timeline/program.ts`, duplicated client/server). Code that already
+works in edited time (captions, chapters, transcript export) shifts into
+program time through `editedToProgramTime`, so cuts and cards compose
+without knowing about each other. A card whose whole scene is cut is
+dropped with it. Clips skip cards.
+
+Rendering: each card is an ffmpeg `color` source at the source's size and
+frame rate, joined with the same xfade chain as cuts; all card text is
+one generated `.ass` file (`lib/cards/ass.ts`) burned in over the program
+before captions and the logo. User text only ever reaches ffmpeg inside
+that file, and the API refuses braces, backslashes and control
+characters. The preview can't insert frames into a `<video>`, so
+`useCardPlayback.ts` pauses the video where a card plays, shows
+`CardPreview` (same layout percentages, `lib/cards/layout.ts`) on its own
+clock, then resumes.
+
+A `transition` operation styles the join into the scene starting at its
+`at` (both joins around that scene's card, if it has one): dip to black,
+dip to white, or crossfade (only with a card -- between two stretches of
+footage that follow each other in the source it shows nothing, so it
+falls back to a cut). At 0 it fades the episode in, at the end it fades
+it out. **Transitions never change the program's length**, so captions
+and chapters need no adjusting: a dip fades each side's own edge
+(`fade`/`afade`, audio capped at 0.3s next to speech) and keeps the
+usual join, and a crossfade's overlap is added to the card's rendered
+length (`plan.ts#layoutProgram`). The preview draws them with
+`TransitionOverlay` from the pure `transition-look.ts`, on its own
+animation-frame loop; audio fades aren't previewed.
+
+**Scene padding**: a `pad` operation (`at` = a scene start, `size`
+2-25% per side, `color` '#RRGGBB') shrinks that scene's footage and
+centres it on a solid border; the output size never changes. Scenes are
+matched and the latest pad wins like transitions
+(`program.ts#placePads`); a padded scene's edges become ordinary cut
+joins in the program, so its length doesn't change either. Rendered per
+segment after the grade (`plan.ts#buildPadFilter`: scale, then `pad`
+back to the source size, so xfade inputs still match); card, B-roll,
+caption and logo layers are unaffected, and clips skip it. Merging a
+scene removes its padding. The preview (`PaddingLayer`) scales the
+`<video>` over the border color on its own animation-frame loop.
+
+In the transcript, clicking a word sets a cursor before it and `/`
+starts a new scene there (`useEditorShortcuts`, via `gapBefore` +
+`splitAt`); with no cursor `/` splits at the playhead like `S`.
+
+**Scene suggestions** are explicit buttons that only ever propose:
+"Suggest scenes" (gpt-4o-mini, sentence indices and titles only --
+`lib/ai/scenes.ts`, validated by `lib/scenes/suggest.ts`: whole
+sentences, the first scene at 0, at least 45s apart, boundaries in the
+silence before a sentence) and "From chapters" (client-side, no AI).
+Shot-change detection (`lib/ffmpeg/shots.ts`, a `shots` TranscriptionJob
+storing its times in `resultJson`) scores frames at 320px wide; a
+suggestion within 1.5s of a cut -- and not inside a word -- moves onto
+it. The user reviews the list and Apply adds the kept splits (and
+optional numbered chapter cards) as one undo step, renaming a split
+already within 1s instead of adding a sliver.
+
+**B-roll**: `media` assets (many per project, stored under a unique
+prefix, with name/size/length columns) placed by `overlay` operations:
+an asset shown from `start` to `end` in source time (so it follows cuts),
+full screen (scaled to fill, cropped) or picture-in-picture (32% wide,
+4% inset, a chosen corner). Placed on program time like captions
+(`program.ts#placeOverlays`), composited as extra ffmpeg inputs after the
+join and grade, before any clip reframe, card text, captions and logo --
+an image looped for its slot, a video trimmed from its offset holding its
+last frame. B-roll audio is never used. It plays in clips too.
+
+**ffmpeg 9 xfade gotchas** (`plan.ts`, measured on 9.0.2): every segment
+must be pinned to the source's frame rate with `fps=` (without it xfade
+drops the start of each later segment), must not get a `settb` after
+that (brings the bug back), and every segment but the last is padded
+with `tpad` clone frames (a segment a frame short of its computed length
+otherwise ends the whole chain at that join).
+
 ---
 
 # 13. Architecture (local-first)
@@ -901,6 +986,14 @@ GET    /api/projects/:id/clips
 POST   /api/projects/:id/clips/highlights        (GPT-5.6 Luna picks; replaces earlier AI picks)
 POST   /api/projects/:id/clips                   PATCH/DELETE /api/projects/:id/clips/:clipId
 (render a clip: POST /api/projects/:id/render with {clipId})
+
+GET    /api/projects/:id/media                    (media library: images and clips for B-roll)
+POST   /api/projects/:id/media?filename=          (raw body, image/png|jpeg|webp or video/*; probed, refused if unreadable)
+GET    /api/projects/:id/media/:assetId/file      DELETE /api/projects/:id/media/:assetId (409 while B-roll uses it)
+
+POST   /api/projects/:id/scenes/shots            (202 + jobId; background shot-change detection)
+GET    /api/projects/:id/scenes/shots            (latest detection)   GET /api/projects/:id/scenes/shots/:jobId
+POST   /api/projects/:id/scenes/suggest          (gpt-4o-mini scene suggestions for review; never applied server-side)
 ```
 
 (No `POST /api/projects/:id/ai/edit` — the free-text AI command bar this

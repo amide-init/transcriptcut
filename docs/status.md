@@ -24,6 +24,10 @@ The timeline shows zoomable frame thumbnails and a live-updating waveform
 | Audio cleanup | -16 / -14 LUFS loudness targets, noise reduction, speaker leveling, rumble filter, 15-second before/after preview. |
 | Publishing | AI chapters (built into MP4/MP3 exports, copyable for YouTube), AI show notes and title ideas, TXT/Markdown transcript, MP3/WAV export. |
 | Clips / Shorts | AI highlight picks or clips from a transcript selection; 9:16, 1:1 or 16:9 with a positionable crop and Shorts-style captions. |
+| Scenes | Split by hand, from chapters, or from AI suggestions (reviewed first, snapped to detected camera cuts); rename, cut or merge whole scenes. |
+| Title cards | Intro, chapter, quote and outro cards, previewed live and rendered into exports; captions and chapters account for their time. |
+| Transitions | Dips to black/white, crossfades into cards, episode fade in/out; never shift timing. |
+| B-roll | Media library of images and clips; cover a transcript selection full screen or picture-in-picture; follows cuts. |
 
 See the [Podcast Workflow](/guide/podcasting) guide for how they fit
 together.

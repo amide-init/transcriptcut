@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { RotateCcw, Search, X } from "lucide-react";
+import { Fragment, useMemo, useState } from "react";
+import { RotateCcw, Scissors, Search, X } from "lucide-react";
 import { useTranscriptStore } from "@/stores/transcript-store";
 import { useTimelineStore } from "@/stores/timeline-store";
 import { usePlayerStore } from "@/stores/player-store";
@@ -13,6 +13,8 @@ import { SpeakersBar } from "@/components/transcript/SpeakersBar";
 import { listSpeakers, speakerColor } from "@/lib/transcript/speakers";
 import { splitIntoSentences } from "@/lib/timeline/sentences";
 import { cutsOverlapping, isWordCut, isFullyCut, padCutStart, wordSpanBounds } from "@/lib/timeline/cuts";
+import { gapBefore, sceneColor, type Scene } from "@/lib/timeline/scenes";
+import { useScenes } from "@/lib/timeline/useScenes";
 import { formatTimecode } from "@/lib/timeline/format";
 import type { CutOperation } from "@/types/edit-operation";
 import type { TranscriptSegment } from "@/types/transcript";
@@ -26,6 +28,8 @@ export function TranscriptPanel() {
   const toggleWordSelection = useTranscriptStore((s) => s.toggleWordSelection);
   const selectWordRange = useTranscriptStore((s) => s.selectWordRange);
   const clearSelection = useTranscriptStore((s) => s.clearSelection);
+  const caretWordId = useTranscriptStore((s) => s.caretWordId);
+  const setCaret = useTranscriptStore((s) => s.setCaret);
   const fillerWordIds = useTranscriptStore((s) => s.fillerWordIds);
   const setSegmentSpeaker = useTranscriptStore((s) => s.setSegmentSpeaker);
 
@@ -47,6 +51,17 @@ export function TranscriptPanel() {
     [transcript]
   );
   const fillerWordIdSet = useMemo(() => new Set(fillerWordIds), [fillerWordIds]);
+
+  const { scenes, splitAt } = useScenes();
+  /** The scene that starts right before each word, keyed by word id -- where the inline scene markers go. */
+  const sceneStartsByWordId = useMemo(() => {
+    const byWord = new Map<string, Scene>();
+    for (const scene of scenes.slice(1)) {
+      const word = allWords.find((w) => w.start >= scene.start);
+      if (word && !byWord.has(word.id)) byWord.set(word.id, scene);
+    }
+    return byWord;
+  }, [scenes, allWords]);
   const existingSpeakers = useMemo(() => listSpeakers(transcript), [transcript]);
 
   if (!transcript) return null;
@@ -56,6 +71,7 @@ export function TranscriptPanel() {
       selectWordRange(selectedWordIds[0], wordId);
     } else {
       toggleWordSelection(wordId);
+      setCaret(wordId);
     }
   };
 
@@ -149,6 +165,11 @@ export function TranscriptPanel() {
           )}
         </div>
       </div>
+      {caretWordId && (
+        <p className="-mt-1.5 text-[0.7rem] text-muted-foreground">
+          Press <kbd className="rounded border border-border px-1 font-mono">/</kbd> to start a new scene at the cursor.
+        </p>
+      )}
       <SpeakersBar />
       <datalist id="speaker-suggestions">
         {existingSpeakers.map((name) => (
@@ -232,33 +253,52 @@ export function TranscriptPanel() {
                           const matchesSearch =
                             query.trim().length > 0 &&
                             word.text.toLowerCase().includes(query.trim().toLowerCase());
+                          const sceneStart = sceneStartsByWordId.get(word.id);
                           return (
-                            <span
-                              key={word.id}
-                              onClick={(e) => {
-                                if (cut) {
-                                  handleRestore(word.start, word.end);
-                                  return;
-                                }
-                                seek(word.start);
-                                handleWordClick(word.id, e);
-                              }}
-                              title={cut ? "Click to restore" : undefined}
-                              className={[
-                                "cursor-pointer rounded px-0.5 transition-colors",
-                                cut
-                                  ? "text-muted-foreground/50 line-through decoration-destructive/70 hover:bg-muted/60"
-                                  : "",
-                                selected ? "bg-accent/30" : "",
-                                active && !cut ? "bg-primary/25" : "",
-                                filler && !cut
-                                  ? "underline decoration-dotted decoration-muted-foreground underline-offset-4"
-                                  : "",
-                                matchesSearch ? "ring-1 ring-accent/70" : "",
-                              ].join(" ")}
-                            >
-                              {word.text}{" "}
-                            </span>
+                            <Fragment key={word.id}>
+                              {sceneStart && (
+                                <button
+                                  type="button"
+                                  onClick={() => seek(sceneStart.start)}
+                                  title="Scene starts here -- rename or remove it in the Scenes panel"
+                                  className="mx-0.5 inline-flex -translate-y-px items-center gap-1 rounded-full border border-border px-1.5 align-middle text-[0.65rem] leading-4 text-muted-foreground hover:text-foreground"
+                                >
+                                  <span className={`size-1.5 rounded-full ${sceneColor(sceneStart.index).dot}`} />
+                                  {sceneStart.title}
+                                </button>
+                              )}
+                              {caretWordId === word.id && !cut && (
+                                <span
+                                  aria-hidden
+                                  className="mr-px inline-block h-[1.1em] w-0.5 translate-y-[0.2em] animate-pulse rounded-full bg-primary"
+                                />
+                              )}
+                              <span
+                                onClick={(e) => {
+                                  if (cut) {
+                                    handleRestore(word.start, word.end);
+                                    return;
+                                  }
+                                  seek(word.start);
+                                  handleWordClick(word.id, e);
+                                }}
+                                title={cut ? "Click to restore" : undefined}
+                                className={[
+                                  "cursor-pointer rounded px-0.5 transition-colors",
+                                  cut
+                                    ? "text-muted-foreground/50 line-through decoration-destructive/70 hover:bg-muted/60"
+                                    : "",
+                                  selected ? "bg-accent/30" : "",
+                                  active && !cut ? "bg-primary/25" : "",
+                                  filler && !cut
+                                    ? "underline decoration-dotted decoration-muted-foreground underline-offset-4"
+                                    : "",
+                                  matchesSearch ? "ring-1 ring-accent/70" : "",
+                                ].join(" ")}
+                              >
+                                {word.text}{" "}
+                              </span>
+                            </Fragment>
                           );
                         })}
                         {sentenceFullyCut ? (
@@ -276,6 +316,15 @@ export function TranscriptPanel() {
                             title="Delete sentence"
                           >
                             <X className="size-3" />
+                          </button>
+                        )}
+                        {!sceneStartsByWordId.has(sentence.words[0].id) && (
+                          <button
+                            onClick={() => splitAt(gapBefore(sentence.start, allWords))}
+                            className="hidden size-4 -translate-y-px items-center justify-center rounded text-muted-foreground hover:text-foreground group-hover/sentence:inline-flex"
+                            title="Start a new scene at this sentence"
+                          >
+                            <Scissors className="size-3" />
                           </button>
                         )}
                       </span>

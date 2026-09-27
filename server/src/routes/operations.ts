@@ -21,13 +21,37 @@ operationsRoute.post("/:id/operations", async (c) => {
   }
 
   const op = parsed.data;
-  if ((op.type === "cut" || op.type === "trim") && op.end <= op.start) {
+  if ((op.type === "cut" || op.type === "trim" || op.type === "overlay") && op.end <= op.start) {
     return errorResponse(c, "INVALID_OPERATION", "end must be after start.", 400);
   }
 
-  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true } });
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true, duration: true } });
   if (!project) {
     return errorResponse(c, "NOT_FOUND", "Project not found.", 404);
+  }
+  // A split at 0 only names the first scene; one at or past the end would make an empty scene.
+  if (op.type === "split" && project.duration && op.timestamp >= project.duration) {
+    return errorResponse(c, "INVALID_OPERATION", "Split must fall inside the video.", 400);
+  }
+  // A card at the duration is an outro; past it there's nothing to play before.
+  if (op.type === "card" && project.duration && op.at > project.duration) {
+    return errorResponse(c, "INVALID_OPERATION", "Card must be placed inside the video.", 400);
+  }
+  if (op.type === "transition" && project.duration && op.at > project.duration) {
+    return errorResponse(c, "INVALID_OPERATION", "Transition must be placed inside the video.", 400);
+  }
+  // Padding belongs to a scene, which always starts before the end.
+  if (op.type === "pad" && project.duration && op.at >= project.duration) {
+    return errorResponse(c, "INVALID_OPERATION", "Padding must be placed inside the video.", 400);
+  }
+  if (op.type === "overlay") {
+    if (project.duration && op.end > project.duration + 0.01) {
+      return errorResponse(c, "INVALID_OPERATION", "B-roll must end inside the video.", 400);
+    }
+    const asset = await prisma.asset.findFirst({ where: { id: op.assetId, projectId, kind: "media" } });
+    if (!asset) {
+      return errorResponse(c, "INVALID_OPERATION", "That media file isn't in this project's library.", 400);
+    }
   }
 
   // Client generates the id (needed so undo/redo can address the exact row);
