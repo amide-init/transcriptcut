@@ -674,6 +674,22 @@ length (`plan.ts#layoutProgram`). The preview draws them with
 `TransitionOverlay` from the pure `transition-look.ts`, on its own
 animation-frame loop; audio fades aren't previewed.
 
+**Scene padding**: a `pad` operation (`at` = a scene start, `size`
+2-25% per side, `color` '#RRGGBB') shrinks that scene's footage and
+centres it on a solid border; the output size never changes. Scenes are
+matched and the latest pad wins like transitions
+(`program.ts#placePads`); a padded scene's edges become ordinary cut
+joins in the program, so its length doesn't change either. Rendered per
+segment after the grade (`plan.ts#buildPadFilter`: scale, then `pad`
+back to the source size, so xfade inputs still match); card, B-roll,
+caption and logo layers are unaffected, and clips skip it. Merging a
+scene removes its padding. The preview (`PaddingLayer`) scales the
+`<video>` over the border color on its own animation-frame loop.
+
+In the transcript, clicking a word sets a cursor before it and `/`
+starts a new scene there (`useEditorShortcuts`, via `gapBefore` +
+`splitAt`); with no cursor `/` splits at the playhead like `S`.
+
 **Scene suggestions** are explicit buttons that only ever propose:
 "Suggest scenes" (gpt-4o-mini, sentence indices and titles only --
 `lib/ai/scenes.ts`, validated by `lib/scenes/suggest.ts`: whole

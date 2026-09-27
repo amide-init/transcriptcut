@@ -15,8 +15,9 @@ you named sections to work with.
 
 - **Split** at the playhead with the **S** key or the **Split** button
   above the timeline, or hover a sentence in the transcript and click ✂
-  to start a new scene there. Splits always land in the gap between two
-  words, never inside one.
+  to start a new scene there. Or click any word in the transcript and
+  press **/** to start a new scene right before it. Splits always land in
+  the gap between two words, never inside one.
 - Scenes appear as named blocks above the timeline and as small markers
   in the transcript.
 - In the **Scenes** tab you can rename a scene, jump to it, cut the whole
@@ -77,6 +78,14 @@ drifts out of sync. A dip fades each side's own edge, and a crossfade
 makes its card slightly longer by the overlap. They're marked on the
 timeline with a diamond, and episode fades with a shaded edge.
 
+## Padding
+
+Each scene has a **Padding** setting: Small, Medium, Large or Extra
+large (5-20% of the frame on each side). The scene's footage shrinks and
+sits centred on a solid border. Pick the border from the swatches or any
+custom color. The video keeps its size and length, and only that scene is
+padded. Merging the scene into the one before removes its padding.
+
 ## B-roll
 
 B-roll is footage or images you cut away to while the conversation keeps
@@ -97,6 +106,8 @@ be deleted while B-roll uses it.
 
 ## Where things sit in the export
 
-From bottom to top: your footage (with its color preset), title cards and
+From bottom to top: your footage (with its color preset and any scene
+padding), title cards and
 transitions, B-roll, card text, captions, then the logo. Cards and B-roll
-aren't affected by the color preset.
+aren't affected by the color preset, and the padding border keeps its
+exact color. Clips don't include scene padding.
