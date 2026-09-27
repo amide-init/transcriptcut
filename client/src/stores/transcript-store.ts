@@ -6,6 +6,8 @@ type TranscriptStore = {
   transcript: Transcript | null;
   /** ids of words currently selected for deletion, in click order */
   selectedWordIds: string[];
+  /** The last word clicked: pressing "/" starts a new scene right before it (useEditorShortcuts). */
+  caretWordId: string | null;
   /** ids of words flagged as filler by the last detection pass */
   fillerWordIds: string[];
   detectingFillerWords: boolean;
@@ -16,6 +18,7 @@ type TranscriptStore = {
   toggleWordSelection: (wordId: string) => void;
   selectWordRange: (fromWordId: string, toWordId: string) => void;
   clearSelection: () => void;
+  setCaret: (wordId: string | null) => void;
   setFillerWordIds: (ids: string[]) => void;
   setDetectingFillerWords: (detecting: boolean) => void;
   setSilenceGaps: (gaps: SilenceGap[] | null) => void;
@@ -26,12 +29,13 @@ type TranscriptStore = {
 export const useTranscriptStore = create<TranscriptStore>((set, get) => ({
   transcript: null,
   selectedWordIds: [],
+  caretWordId: null,
   fillerWordIds: [],
   detectingFillerWords: false,
   silenceGaps: null,
 
   setTranscript: (transcript) =>
-    set({ transcript, selectedWordIds: [], fillerWordIds: [], silenceGaps: null }),
+    set({ transcript, selectedWordIds: [], caretWordId: null, fillerWordIds: [], silenceGaps: null }),
 
   toggleWordSelection: (wordId) =>
     set((s) => ({
@@ -52,6 +56,7 @@ export const useTranscriptStore = create<TranscriptStore>((set, get) => ({
   },
 
   clearSelection: () => set({ selectedWordIds: [] }),
+  setCaret: (caretWordId) => set({ caretWordId }),
 
   setFillerWordIds: (fillerWordIds) => set({ fillerWordIds }),
   setDetectingFillerWords: (detectingFillerWords) => set({ detectingFillerWords }),

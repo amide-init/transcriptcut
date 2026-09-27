@@ -11,6 +11,7 @@ import {
   type Join,
   type PlacedOverlay,
   type ProgramItem,
+  type ScenePad,
 } from "@/lib/timeline/program";
 import type { CutOperation } from "@/types/edit-operation";
 import type { PlayableRange } from "@/types/timeline";
@@ -26,6 +27,8 @@ export type Program = {
   fadeOut: Fade | null;
   /** B-roll on the program timeline. */
   overlays: PlacedOverlay[];
+  /** Padded scenes, in source time. */
+  pads: ScenePad[];
   editedDuration: number;
   /** Edited duration plus every card: what the export runs for. */
   duration: number;
@@ -42,7 +45,7 @@ export function useProgram(): Program {
     const program =
       sourceDuration > 0
         ? buildProgram(operations, ranges, sourceDuration)
-        : { slots: [], items: [], joins: [], fadeIn: null, fadeOut: null, overlays: [] };
+        : { slots: [], items: [], joins: [], fadeIn: null, fadeOut: null, overlays: [], pads: [] };
     const editedDuration = getEditedDuration(ranges);
     return {
       cuts,

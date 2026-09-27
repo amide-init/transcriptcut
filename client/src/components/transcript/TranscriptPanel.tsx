@@ -28,6 +28,8 @@ export function TranscriptPanel() {
   const toggleWordSelection = useTranscriptStore((s) => s.toggleWordSelection);
   const selectWordRange = useTranscriptStore((s) => s.selectWordRange);
   const clearSelection = useTranscriptStore((s) => s.clearSelection);
+  const caretWordId = useTranscriptStore((s) => s.caretWordId);
+  const setCaret = useTranscriptStore((s) => s.setCaret);
   const fillerWordIds = useTranscriptStore((s) => s.fillerWordIds);
   const setSegmentSpeaker = useTranscriptStore((s) => s.setSegmentSpeaker);
 
@@ -69,6 +71,7 @@ export function TranscriptPanel() {
       selectWordRange(selectedWordIds[0], wordId);
     } else {
       toggleWordSelection(wordId);
+      setCaret(wordId);
     }
   };
 
@@ -162,6 +165,11 @@ export function TranscriptPanel() {
           )}
         </div>
       </div>
+      {caretWordId && (
+        <p className="-mt-1.5 text-[0.7rem] text-muted-foreground">
+          Press <kbd className="rounded border border-border px-1 font-mono">/</kbd> to start a new scene at the cursor.
+        </p>
+      )}
       <SpeakersBar />
       <datalist id="speaker-suggestions">
         {existingSpeakers.map((name) => (
@@ -258,6 +266,12 @@ export function TranscriptPanel() {
                                   <span className={`size-1.5 rounded-full ${sceneColor(sceneStart.index).dot}`} />
                                   {sceneStart.title}
                                 </button>
+                              )}
+                              {caretWordId === word.id && !cut && (
+                                <span
+                                  aria-hidden
+                                  className="mr-px inline-block h-[1.1em] w-0.5 translate-y-[0.2em] animate-pulse rounded-full bg-primary"
+                                />
                               )}
                               <span
                                 onClick={(e) => {

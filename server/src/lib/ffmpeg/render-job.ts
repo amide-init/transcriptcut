@@ -258,6 +258,9 @@ export async function runRenderJob(
       cardFrame = { width: sourceStream.width, height: sourceStream.height, textPath };
     }
 
+    const hasPads = program?.items.some((item) => item.kind === "source" && item.pad) ?? false;
+    const padFrame = hasPads && sourceStream ? { width: sourceStream.width, height: sourceStream.height } : undefined;
+
     if (burnInCaptions) {
       if (!project.transcript) throw new Error("Captions were requested but this project has no transcript.");
       const transcript: Transcript = {
@@ -328,6 +331,7 @@ export async function runRenderJob(
           frameRate: sourceStream!.fps,
           program,
           cardFrame,
+          padFrame,
           broll:
             sourceStream && brollOverlays.length > 0
               ? { frame: { width: sourceStream.width, height: sourceStream.height }, overlays: brollOverlays }

@@ -1,5 +1,5 @@
 import type { PlayableRange } from "@/types/timeline";
-import type { Fade, Join, ProgramItem } from "@/lib/timeline/program";
+import type { Fade, ItemPad, Join, ProgramItem } from "@/lib/timeline/program";
 import { OVERLAY_CORNERS, type OverlayCorner, type OverlayMode } from "@/types/edit-operation";
 import { getFfmpegFilter } from "@/lib/ffmpeg/filters";
 import { buildPropertiesFilter } from "@/lib/ffmpeg/properties";
@@ -365,6 +365,20 @@ const PIP_INSET_FRACTION = 0.04;
 
 const even = (n: number) => Math.max(2, Math.round(n / 2) * 2);
 
+/**
+ * Scene padding: shrink the footage to `scale` of the frame and centre it
+ * on a solid border, back at the full frame size. The color is only ever
+ * a validated '#RRGGBB'.
+ */
+export function buildPadFilter(pad: ItemPad, frame: { width: number; height: number }): string {
+  if (!Number.isFinite(pad.scale) || pad.scale < 0.4 || pad.scale >= 1) throw new Error("Invalid padding size.");
+  if (!/^#[0-9a-fA-F]{6}$/.test(pad.color)) throw new Error("Invalid padding color.");
+  const w = even(frame.width * pad.scale);
+  const h = even(frame.height * pad.scale);
+  const color = pad.color.slice(1).toUpperCase();
+  return `scale=${w}:${h},pad=${frame.width}:${frame.height}:(ow-iw)/2:(oh-ih)/2:color=0x${color},setsar=1`;
+}
+
 function assertValidOverlay(o: RenderOverlay): void {
   if (!o.path) throw new Error("B-roll has no file.");
   if (![o.start, o.end, o.offset].every(Number.isFinite) || o.start < 0 || o.end <= o.start || o.offset < 0) {
@@ -526,6 +540,12 @@ export function buildRenderArgs(args: {
   program?: RenderProgram;
   cardFrame?: { width: number; height: number; textPath: string };
   /**
+   * The source's frame size, needed when a scene is padded: its footage is
+   * shrunk and padded back out to exactly this size, so every segment
+   * still matches for xfade.
+   */
+  padFrame?: { width: number; height: number };
+  /**
    * B-roll to composite, on the program timeline, and the source frame
    * size it's laid out on (applied before any reframe, so a clip crops
    * B-roll with the footage).
@@ -553,6 +573,7 @@ export function buildRenderArgs(args: {
     frameRate,
     program,
     cardFrame,
+    padFrame,
     broll,
   } = args;
 
@@ -561,6 +582,12 @@ export function buildRenderArgs(args: {
   if (!/^\d{1,6}(\/\d{1,6})?$/.test(frameRate)) throw new Error(`Invalid frame rate: ${frameRate}`);
   if (withCards && !cardFrame) throw new Error("Title cards need the source's frame size.");
   if (cardFrame) assertValidCardFrame(cardFrame);
+  const withPads = items.some((item) => item.kind === "source" && item.pad);
+  if (withPads && !padFrame) throw new Error("Scene padding needs the source's frame size.");
+  if (padFrame) assertValidCardFrame(padFrame);
+  // Cards and padded scenes are graded per source segment, so a card or
+  // border keeps its exact chosen color.
+  const perSegment = withCards || withPads;
 
   const presetFilter = getFfmpegFilter(filterId);
   const propertiesFilter = properties ? buildPropertiesFilter(properties) : null;
@@ -585,7 +612,7 @@ export function buildRenderArgs(args: {
   items.forEach((item, i) => {
     const pad = i < items.length - 1 ? `,${SEGMENT_TAIL_PAD}` : "";
     const fades = videoFades(layout, i);
-    if (!withCards) {
+    if (!perSegment) {
       const r = item as Extract<ProgramItem, { kind: "source" }>;
       filterChains.push(
         `[0:v]trim=start=${r.start.toFixed(3)}:end=${r.end.toFixed(3)},setpts=PTS-STARTPTS,fps=${frameRate}${fades}${pad}[v${i}]`
@@ -597,8 +624,9 @@ export function buildRenderArgs(args: {
     // turn a blue card grey).
     if (item.kind === "source") {
       const grade = colorFilter ? `,${colorFilter}` : "";
+      const border = item.pad ? `,${buildPadFilter(item.pad, padFrame!)}` : "";
       filterChains.push(
-        `[0:v]trim=start=${item.start.toFixed(3)}:end=${item.end.toFixed(3)},setpts=PTS-STARTPTS${grade},fps=${frameRate},${CARD_VIDEO_FORMAT}${fades}${pad}[v${i}]`
+        `[0:v]trim=start=${item.start.toFixed(3)}:end=${item.end.toFixed(3)},setpts=PTS-STARTPTS${grade},fps=${frameRate},${CARD_VIDEO_FORMAT}${border}${fades}${pad}[v${i}]`
       );
     } else {
       const color = item.card.background.slice(1).toUpperCase();
@@ -642,7 +670,7 @@ export function buildRenderArgs(args: {
   }
 
   let videoOutLabel = "[outv]";
-  if (colorFilter && !withCards) {
+  if (colorFilter && !perSegment) {
     filterChains.push(`[outv]${colorFilter}[filtered]`);
     videoOutLabel = "[filtered]";
   }

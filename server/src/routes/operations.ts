@@ -40,6 +40,10 @@ operationsRoute.post("/:id/operations", async (c) => {
   if (op.type === "transition" && project.duration && op.at > project.duration) {
     return errorResponse(c, "INVALID_OPERATION", "Transition must be placed inside the video.", 400);
   }
+  // Padding belongs to a scene, which always starts before the end.
+  if (op.type === "pad" && project.duration && op.at >= project.duration) {
+    return errorResponse(c, "INVALID_OPERATION", "Padding must be placed inside the video.", 400);
+  }
   if (op.type === "overlay") {
     if (project.duration && op.end > project.duration + 0.01) {
       return errorResponse(c, "INVALID_OPERATION", "B-roll must end inside the video.", 400);

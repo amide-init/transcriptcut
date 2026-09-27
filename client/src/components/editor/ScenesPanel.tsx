@@ -11,9 +11,16 @@ import { formatTimecode } from "@/lib/timeline/format";
 import { Button } from "@/components/ui/button";
 import { CardEditor } from "@/components/editor/CardEditor";
 import { TransitionPicker } from "@/components/editor/TransitionPicker";
+import { PaddingPicker } from "@/components/editor/PaddingPicker";
 import { SceneSuggestions } from "@/components/editor/SceneSuggestions";
 import { CARD_BACKGROUNDS } from "@/lib/cards/layout";
-import type { CardOperation, CardTemplate, CutOperation, TransitionOperation } from "@/types/edit-operation";
+import type {
+  CardOperation,
+  CardTemplate,
+  CutOperation,
+  PadOperation,
+  TransitionOperation,
+} from "@/types/edit-operation";
 
 /** A card at a scene's start (within this) belongs to that scene. */
 const CARD_MATCH_SECONDS = 0.05;
@@ -56,6 +63,15 @@ export function ScenesPanel() {
   );
   /** The transition in effect at a moment: the latest one there. */
   const transitionAt = (at: number) => transitions.filter((t) => Math.abs(t.at - at) <= CARD_MATCH_SECONDS).at(-1);
+  const pads = useMemo(
+    () =>
+      operations
+        .filter((op): op is PadOperation => op.type === "pad")
+        .sort((a, b) => a.createdAt - b.createdAt),
+    [operations]
+  );
+  /** The padding in effect for the scene starting at a moment: the latest one there. */
+  const padsAt = (at: number) => pads.filter((p) => Math.abs(p.at - at) <= CARD_MATCH_SECONDS);
   const outroCards = cards.filter((c) => c.at >= duration - CARD_MATCH_SECONDS);
   const activeScene = sceneAt(scenes, currentTime);
 
@@ -122,8 +138,9 @@ export function ScenesPanel() {
           Split scene at playhead
         </Button>
         <p className="text-muted-foreground">
-          Or press <kbd className="rounded border border-border px-1 font-mono">S</kbd>. Splits land between words, never
-          inside one.
+          Or press <kbd className="rounded border border-border px-1 font-mono">S</kbd>, or click a word in the
+          transcript and press <kbd className="rounded border border-border px-1 font-mono">/</kbd>. Splits land
+          between words, never inside one.
         </p>
       </div>
 
@@ -196,7 +213,8 @@ export function ScenesPanel() {
                       <Button
                         variant="ghost"
                         size="icon-xs"
-                        onClick={() => removeOperations([scene.splitId!])}
+                        // The scene's padding goes with its boundary, or it would come back on a later split here.
+                        onClick={() => removeOperations([scene.splitId!, ...padsAt(scene.start).map((p) => p.id)])}
                         title="Merge into previous scene"
                       >
                         <Merge className="size-3" />
@@ -223,7 +241,7 @@ export function ScenesPanel() {
                 {cardsAt(scene.index === 0 ? 0 : scene.start).length > 0 && (
                   <div className="flex flex-col gap-1 pl-3.5">{cardList(cardsAt(scene.index === 0 ? 0 : scene.start))}</div>
                 )}
-                <div className="pl-3.5">
+                <div className="flex flex-col gap-1 pl-3.5">
                   {scene.index === 0 ? (
                     <TransitionPicker label="Fade in" at={0} edge="in" current={transitionAt(0)} />
                   ) : (
@@ -234,6 +252,7 @@ export function ScenesPanel() {
                       canCrossfade={cardsAt(scene.start).length > 0}
                     />
                   )}
+                  <PaddingPicker at={scene.start} current={padsAt(scene.start).at(-1)} />
                 </div>
               </li>
             );
