@@ -9,10 +9,9 @@ import { prisma } from "@/lib/db/client";
  * Applies any Prisma migrations the database hasn't seen yet, at server
  * startup.
  *
- * The packaged Mac app ships a pre-migrated app.db.template and copies it
- * only on first launch (client/src-tauri/src/lib.rs), and the Prisma CLI
- * isn't in the app bundle -- so without this, an existing install never
- * gets new tables, and the updated server crashes on the first query that
+ * A deployment that doesn't run the Prisma CLI (e.g. a production server
+ * started straight from `bun run`) would otherwise never get new tables
+ * on upgrade, and the updated server would crash on the first query that
  * touches one. This records each migration in Prisma's own
  * `_prisma_migrations` table, in the same format (sha256 checksum,
  * millisecond timestamps), so `prisma migrate dev/deploy` still sees an

@@ -15,9 +15,6 @@ hero:
     alt: transcriptcut editor showing video, transcript, and timeline
   actions:
     - theme: brand
-      text: Download for macOS
-      link: /download
-    - theme: alt
       text: Get Started
       link: /guide/getting-started
     - theme: alt

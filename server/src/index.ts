@@ -46,9 +46,9 @@ app.route("/api/projects", mediaRoute);
 app.route("/api/projects", scenesRoute);
 app.route("/api/settings", settingsRoute);
 
-// Serves the built Vite client (server-bundle/client-dist in the packaged
-// Tauri app; unset/missing in plain `bun run dev`, where Vite's own dev
-// server handles the client instead) so one process can serve both the
+// Serves the built Vite client (CLIENT_DIST_DIR in a production deploy;
+// unset/missing in plain `bun run dev`, where Vite's own dev server
+// handles the client instead) so one process can serve both the
 // UI and the API -- registered after every /api/* mount so static/SPA
 // fallback routes never shadow an API request.
 const clientDistDir = process.env.CLIENT_DIST_DIR ?? "./client-dist";
@@ -63,7 +63,7 @@ if (existsSync(clientDistDir)) {
   app.get("*", serveStatic({ root: clientDistDir, path: "index.html" }));
 }
 
-// Bring an existing database (e.g. a packaged-app install from an older
+// Bring an existing database (e.g. a data directory from an older
 // version) up to the current schema before anything queries it.
 await applyPendingMigrations();
 

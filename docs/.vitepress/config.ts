@@ -18,7 +18,6 @@ export default defineConfig({
     logo: "/favicon.svg",
 
     nav: [
-      { text: "Download", link: "/download" },
       { text: "Guide", link: "/guide/getting-started" },
       { text: "Screenshots", link: "/screenshots" },
       { text: "Status", link: "/status" },
