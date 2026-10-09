@@ -45,9 +45,6 @@ behind a cloud API boundary.
   backend). It's never sent to the browser.
 - `.env.example` documents every variable without real values, so
   contributors know what to fill in.
-- The macOS app doesn't bake a key into the build — each person enters
-  their own on first launch, stored only in that app's local data
-  directory. See [Download](/download).
 
 ## If you're contributing
 

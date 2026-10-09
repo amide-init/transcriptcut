@@ -5,9 +5,6 @@ transcriptcut is local-first: everything runs on your own machine with
 OpenAI API key, used for transcription and the AI buttons (filler words,
 speakers, chapters, show notes, highlights), never for storage.
 
-Prefer not to run anything at all? A native macOS app is also available
-— see [Download](/download).
-
 ## Requirements
 
 - [Node.js](https://nodejs.org/) 20+
@@ -59,8 +56,7 @@ limit, which defaults to 10 GB.
 `pnpm run dev` runs the backend with `bun --watch`, which holds on to a
 few file handles every time it reloads. After a long session with many
 server code edits, starting FFmpeg can fail with `EBADF: bad file
-descriptor, posix_spawn`. Restarting `pnpm run dev` clears it. The
-packaged Mac app doesn't use `--watch` and isn't affected.
+descriptor, posix_spawn`. Restarting `pnpm run dev` clears it.
 :::
 
 ## Your first edit

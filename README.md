@@ -90,8 +90,7 @@ Local persistence (SQLite via Prisma) and project CRUD are built and in
 use. The app is a Vite React SPA (`client/`) talking to a Bun/Hono
 backend (`server/`) — the two run as separate processes, kept in one
 piece by `pnpm run dev` from the repo root. This split (no server-side
-rendering, one deployable backend unit) is also what makes the native
-macOS app possible — see [Download](#download) below — and see the
+rendering, one deployable backend unit) keeps deployment simple — see the
 [issue tracker](https://github.com/amide-init/transcriptcut/issues)
 for the full breakdown of what's done vs. planned.
 
@@ -161,38 +160,12 @@ Open [http://localhost:5173](http://localhost:5173). See
 [`server/.env.example`](./server/.env.example) for what each variable
 does, and [`CONTRIBUTING.md`](./CONTRIBUTING.md) for more.
 
-Two things to know during development:
+One thing to know during development:
 
-- **The dev server and the Mac app both use port 3001**, so quit one
-  before starting the other. If the app shows "404 Not Found", a dev
-  server is still running.
 - **`bun --watch` leaks a few file handles on every reload.** After a long
   session with many server edits, FFmpeg can fail to start with
   `EBADF: bad file descriptor, posix_spawn`. Restart `pnpm run dev` to
   clear it.
-
-### Download
-
-A native macOS app is also available (Apple Silicon only) — no need to
-clone the repo or run anything. Grab it from the
-**[docs download page](https://transcriptcut.aamin.me/download)**,
-which also covers the one-time Gatekeeper step (this build is ad-hoc
-signed, not signed with a paid Apple Developer account) and the
-first-launch API key setup.
-
-To build it yourself instead:
-
-```bash
-cd client
-pnpm exec tauri build
-```
-
-Produces `client/src-tauri/target/release/bundle/{macos,dmg}/`. Installing
-a newer build over an older one keeps your projects: the server upgrades
-the app's database on launch. See
-`claude.md` section 35 for how it's wired together, and
-[`.github/workflows/build-macos-app.yml`](./.github/workflows/build-macos-app.yml)
-for how CI builds and releases it on a version tag push.
 
 ## Testing
 

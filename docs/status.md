@@ -57,11 +57,6 @@ use.
 There's no end-to-end/UI test suite yet — only deterministic Vitest unit
 tests (client + server), run on every PR in CI.
 
-## macOS app
-
-A native `.app` build (Tauri) is also available, built and released via
-CI — see [Download](/download).
-
 ## No accounts
 
 There is no login — v1 is a single local user by design, not a gap to
