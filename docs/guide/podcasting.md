@@ -14,7 +14,7 @@ own, and AI output never edits your project without you reviewing it
 Upload the recording from **New project**. Long episodes are fine:
 
 - **Uploads up to 10 GB** by default (set `MAX_UPLOAD_MB` in
-  `server/.env` to change it). The file streams straight to disk, so size
+  `.env` to change it). The file streams straight to disk, so size
   is limited by free disk space, not memory. The upload button shows
   progress.
 - **Transcription runs in the background, in chunks.** The server

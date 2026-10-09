@@ -33,7 +33,7 @@ export function writeSettings(settings: Settings): void {
 
 /**
  * A key entered through the setup screen (stored in settings.json) takes
- * priority over server/.env's OPENAI_API_KEY -- but local dev keeps
+ * priority over the root .env's OPENAI_API_KEY -- but local dev keeps
  * working unchanged via .env, since nothing writes settings.json unless
  * someone actually submits the setup form.
  */

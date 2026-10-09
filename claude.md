@@ -1476,8 +1476,8 @@ with the same care as the code itself.
 
 # 35. Web Only (no native app)
 
-The app ships as the web setup only: `pnpm run dev` locally, or the Bun
-server serving the built client in production. A Tauri-wrapped macOS
+The app ships as the web setup only: `docker compose up` to run it, or
+`pnpm run dev` to develop it. A Tauri-wrapped macOS
 `.app` (and its CI release workflow) existed earlier and was deliberately
 removed to keep the project to one supported setup; don't re-add native
 packaging speculatively.
@@ -1491,4 +1491,30 @@ any deployment:
 * The OpenAI API key can be entered on first run through
   `client/src/routes/SetupRoute.tsx`, stored in `DATA_DIR/settings.json`
   (`server/src/lib/settings.ts`), which is checked before falling back to
-  `server/.env`'s `OPENAI_API_KEY`.
+  the root `.env`'s `OPENAI_API_KEY`.
+
+## Docker
+
+The run path is one container (`Dockerfile`, `compose.yaml` at the repo
+root): a Node build stage installs the workspace, runs `prisma generate`,
+builds the client and `pnpm deploy`s a production-only server; the
+runtime is `oven/bun` running `src/index.ts`, serving the client from
+`CLIENT_DIST_DIR` and keeping everything under `DATA_DIR=/data` (a named
+volume). A fresh volume works because startup migrations build the
+schema. Choices worth knowing before changing them:
+
+* FFmpeg is the pinned static build `mwader/static-ffmpeg:9.0.2`, not
+  Debian's (5.1): it has libass, and 9.0.2 is the version the xfade
+  workarounds in section 12 were measured on.
+* Caption and card fonts are Liberation + DejaVu, not Microsoft's core
+  fonts (a build-time SourceForge download with licensing caveats), so
+  burned-in text can differ slightly from a Mac.
+* compose publishes on `127.0.0.1` only, since there's no auth
+  (section 18).
+* There's one `.env`, at the repo root (`.env.example` documents it),
+  shared by both setups: the dev server loads it with
+  `bun --env-file=../.env` (Bun's own `.env` loading would look in
+  `server/`), the Prisma CLI through `prisma7.config.ts`, and compose
+  through `env_file`. compose pins the paths, port and FFmpeg binaries
+  over it, since dev values (relative paths, a Homebrew `FFMPEG_PATH`)
+  don't exist in the container.

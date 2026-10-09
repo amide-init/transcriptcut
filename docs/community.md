@@ -26,8 +26,8 @@ OS/Node/FFmpeg versions if it's a rendering or transcription issue.
    and [`claude.md`](https://github.com/amide-init/transcriptcut/blob/main/claude.md)
    (the full product spec — read it before proposing anything that
    changes how the app is structured).
-2. Set up locally with `./scripts/setup-mac.sh` (macOS) or the manual
-   steps in [Getting Started](/guide/getting-started).
+2. Set up locally with the steps in
+   [Getting Started](/guide/getting-started).
 3. Before opening a PR, all of these must pass (CI runs the same three
    commands on every PR):
 
