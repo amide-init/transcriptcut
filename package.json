@@ -13,7 +13,6 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "@prisma/engines",
-      "better-sqlite3",
       "prisma",
       "protobufjs",
       "unrs-resolver"

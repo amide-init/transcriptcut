@@ -1,0 +1,23 @@
+# docker compose up --build, then open http://localhost:3001
+name: transcriptcut
+
+services:
+  app:
+    build: .
+    # Bound to this machine only: there's no login (claude.md section 18),
+    # so don't publish it to a shared network without adding auth first.
+    ports:
+      - "127.0.0.1:3001:3001"
+    volumes:
+      - transcriptcut-data:/data
+    # Optional: OPENAI_API_KEY (and MAX_UPLOAD_MB) from a .env next to this
+    # file. Without one, the app asks for the key on first launch.
+    env_file:
+      - path: .env
+        required: false
+    restart: unless-stopped
+
+volumes:
+  transcriptcut-data:
+    # Fixed name, so it doesn't depend on the folder the repo is cloned into.
+    name: transcriptcut-data
