@@ -13,6 +13,11 @@ create projects, upload video, trigger renders, read/delete anything.
 network without adding real authentication first.** Running it on
 `localhost` on your own machine is the intended v1 use case.
 
+The Docker setup follows this: `compose.yaml` publishes the app on
+`127.0.0.1:3001`, so other machines on your network can't reach it.
+Changing that to `3001:3001` (or `0.0.0.0`) exposes it to everyone on
+the network, so only do that behind real authentication.
+
 ## What the app validates, and why it matters more locally
 
 Even without accounts, this is an app that runs FFmpeg and touches the

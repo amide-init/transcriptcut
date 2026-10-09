@@ -1,11 +1,40 @@
 # Getting Started
 
-transcriptcut is local-first: everything runs on your own machine with
-`pnpm install && pnpm run dev`. The only external dependency is an
-OpenAI API key, used for transcription and the AI buttons (filler words,
-speakers, chapters, show notes, highlights), never for storage.
+transcriptcut is local-first: everything runs on your own machine. The
+only external dependency is an OpenAI API key, used for transcription and
+the AI buttons (filler words, speakers, chapters, show notes,
+highlights), never for storage.
 
-## Requirements
+## Run with Docker
+
+The easiest way to run it. All you need is
+[Docker](https://docs.docker.com/get-docker/); the image includes Bun,
+FFmpeg (with subtitle burn-in support) and the fonts captions need.
+
+```bash
+git clone https://github.com/amide-init/transcriptcut.git
+cd transcriptcut
+docker compose up --build
+```
+
+Open `http://localhost:3001`. On first launch the app asks
+for your OpenAI API key. To skip that, create a `.env` file next to
+`compose.yaml` containing `OPENAI_API_KEY=sk-...` before starting.
+
+Projects, uploads and renders live in the `transcriptcut-data` Docker
+volume, so they survive restarts and rebuilds. To update, run
+`git pull && docker compose up --build`.
+
+The app is published on `127.0.0.1` only, since it has no login (see
+[Security & Self-Hosting](/guide/security)). Caption fonts use free Liberation and DejaVu equivalents of Arial,
+Helvetica, Verdana and the rest, so burned-in captions can look slightly
+different from the same export on a Mac.
+
+## Development setup
+
+For working on the code, with hot reload.
+
+### Requirements
 
 - [Node.js](https://nodejs.org/) 20+
 - [pnpm](https://pnpm.io/) 10+
@@ -14,7 +43,7 @@ speakers, chapters, show notes, highlights), never for storage.
   `PATH` (used for audio extraction, cuts, audio cleanup and export)
 - An OpenAI API key (used server-side only)
 
-## Setup
+### Setup
 
 ```bash
 git clone https://github.com/amide-init/transcriptcut.git

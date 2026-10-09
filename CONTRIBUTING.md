@@ -7,6 +7,9 @@ issues for bugs and ideas.
 
 ## Running it locally
 
+Just want to use the app? `docker compose up --build` runs it without
+any of the tools below; see the README. For working on the code:
+
 
 ```bash
 pnpm install                  # installs deps for client + server

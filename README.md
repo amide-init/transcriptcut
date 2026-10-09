@@ -124,12 +124,37 @@ pnpm run dev
 
 ## Running the app
 
-Requires [FFmpeg](https://ffmpeg.org/download.html) (with `ffprobe`) and
-[Bun](https://bun.sh) (the backend's runtime) on your machine, plus an
-OpenAI API key (used server-side only, for transcription and the AI
-buttons).
+The easiest way to run it is with [Docker](https://docs.docker.com/get-docker/).
+The image includes Bun, FFmpeg (with subtitle burn-in support) and the
+fonts captions need. You only bring an OpenAI API key, used server-side
+for transcription and the AI buttons.
 
-### Setup
+### With Docker
+
+```bash
+git clone https://github.com/amide-init/transcriptcut.git
+cd transcriptcut
+docker compose up --build
+```
+
+Open [http://localhost:3001](http://localhost:3001). On first launch the
+app asks for your OpenAI API key. To skip that, create a `.env` file next to
+`compose.yaml` containing `OPENAI_API_KEY=sk-...` before starting.
+
+Projects, uploads and renders live in the `transcriptcut-data` Docker
+volume, so they survive restarts and rebuilds. To update, run
+`git pull && docker compose up --build`.
+
+The app is published on `127.0.0.1` only, since it has no login (see
+`claude.md` section 18). Caption fonts use free Liberation and DejaVu equivalents of Arial,
+Helvetica, Verdana and the rest, so burned-in captions can look slightly
+different from the same export on a Mac.
+
+### Development setup
+
+For working on the code, with hot reload. Requires
+[FFmpeg](https://ffmpeg.org/download.html) (with `ffprobe`) and
+[Bun](https://bun.sh) on your machine:
 
 ```bash
 git clone https://github.com/amide-init/transcriptcut.git
