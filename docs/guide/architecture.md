@@ -24,10 +24,9 @@ rewrite required.
 a Bun + Hono backend serving the REST API, FFmpeg, Prisma/SQLite, and
 the OpenAI calls. They run as separate processes, started together by
 `pnpm run dev` from the repo root, with Vite proxying `/api/*` to the
-backend in development. This split — one deployable backend unit, no
-server-rendering step to work around — is also what makes the native
-macOS app possible: the packaged app spawns the same Bun server as a
-child process and points a Tauri window at it. See [Download](/download).
+backend in development. In production the built client can be served as
+static files by the same Bun process, so it's one deployable backend
+unit with no server-rendering step.
 
 ## Data on disk
 
@@ -103,10 +102,10 @@ adding if concurrent renders become an actual requirement.
 ## Database upgrades
 
 The server applies any pending Prisma migrations at startup and records
-them in Prisma's own `_prisma_migrations` table. That's what upgrades an
-existing Mac app install, which can't run the Prisma CLI, to a newer
-schema without losing projects. For a database that's already current,
-it does nothing.
+them in Prisma's own `_prisma_migrations` table, so an existing data
+directory is upgraded to a newer schema without losing projects, even
+where the Prisma CLI isn't available. For a database that's already
+current, it does nothing.
 
 ## No accounts, by design
 
