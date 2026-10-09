@@ -14,31 +14,11 @@ speakers, chapters, show notes, highlights), never for storage.
   `PATH` (used for audio extraction, cuts, audio cleanup and export)
 - An OpenAI API key (used server-side only)
 
-## macOS quick start
-
-[`scripts/setup-mac.sh`](https://github.com/amide-init/transcriptcut/blob/main/scripts/setup-mac.sh)
-installs Node/pnpm/Bun/FFmpeg (with subtitle burn-in support) via
-Homebrew if you don't already have them, installs dependencies for the
-whole workspace, and walks you through `.env`:
+## Setup
 
 ```bash
 git clone https://github.com/amide-init/transcriptcut.git
 cd transcriptcut
-./scripts/setup-mac.sh
-```
-
-Then, from the repo root:
-
-```bash
-pnpm run dev
-```
-
-Safe to re-run — it only installs what's missing and never overwrites an
-existing `.env`.
-
-## Manual setup (any platform)
-
-```bash
 pnpm install                  # installs deps for client + server
 cd server
 cp .env.example .env          # then fill in OPENAI_API_KEY

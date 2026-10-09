@@ -7,9 +7,6 @@ issues for bugs and ideas.
 
 ## Running it locally
 
-On macOS, `./scripts/setup-mac.sh` handles all of this for you (Node/pnpm/
-Bun/FFmpeg via Homebrew, `pnpm install`, `prisma generate`, and `.env`) --
-see the README's "macOS quick start". Otherwise, manually:
 
 ```bash
 pnpm install                  # installs deps for client + server
@@ -27,9 +24,8 @@ does.
 You'll also need [FFmpeg](https://ffmpeg.org/download.html) and
 [Bun](https://bun.sh) (the backend's runtime) on your machine. If burning
 in captions fails with `No such filter: 'subtitles'`, your FFmpeg build
-doesn't include libass — see the `FFMPEG_PATH` note in `.env.example` (or
-just use `scripts/setup-mac.sh`, which installs and points at a build
-that has it).
+doesn't include libass — see the `FFMPEG_PATH` note in `.env.example`
+(on macOS, Homebrew's `ffmpeg-full` has it).
 
 ## Before submitting a PR
 
