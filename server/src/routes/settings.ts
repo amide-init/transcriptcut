@@ -7,7 +7,7 @@ export const settingsRoute = new Hono();
 
 // Never returns the key itself -- only whether one is configured. Checks
 // the same source getOpenAiApiKey() does (settings.json, falling back to
-// server/.env's OPENAI_API_KEY) -- not just settings.json alone -- so
+// the root .env's OPENAI_API_KEY) -- not just settings.json alone -- so
 // local dev (where the key lives in .env, and no one has ever hit the
 // setup screen) correctly reports "configured" instead of being wrongly
 // redirected to setup.

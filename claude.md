@@ -1491,7 +1491,7 @@ any deployment:
 * The OpenAI API key can be entered on first run through
   `client/src/routes/SetupRoute.tsx`, stored in `DATA_DIR/settings.json`
   (`server/src/lib/settings.ts`), which is checked before falling back to
-  `server/.env`'s `OPENAI_API_KEY`.
+  the root `.env`'s `OPENAI_API_KEY`.
 
 ## Docker
 
@@ -1511,3 +1511,10 @@ schema. Choices worth knowing before changing them:
   burned-in text can differ slightly from a Mac.
 * compose publishes on `127.0.0.1` only, since there's no auth
   (section 18).
+* There's one `.env`, at the repo root (`.env.example` documents it),
+  shared by both setups: the dev server loads it with
+  `bun --env-file=../.env` (Bun's own `.env` loading would look in
+  `server/`), the Prisma CLI through `prisma7.config.ts`, and compose
+  through `env_file`. compose pins the paths, port and FFmpeg binaries
+  over it, since dev values (relative paths, a Homebrew `FFMPEG_PATH`)
+  don't exist in the container.

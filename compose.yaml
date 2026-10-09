@@ -10,11 +10,21 @@ services:
       - "127.0.0.1:3001:3001"
     volumes:
       - transcriptcut-data:/data
-    # Optional: OPENAI_API_KEY (and MAX_UPLOAD_MB) from a .env next to this
-    # file. Without one, the app asks for the key on first launch.
+    # Optional: OPENAI_API_KEY (and MAX_UPLOAD_MB) from the same root .env
+    # the dev server uses. Without one, the app asks for the key on first
+    # launch.
     env_file:
       - path: .env
         required: false
+    # Pinned over anything in .env, whose dev values (relative paths, a
+    # Homebrew FFMPEG_PATH) don't exist inside the container.
+    environment:
+      PORT: "3001"
+      DATA_DIR: /data
+      DATABASE_URL: file:/data/app.db
+      CLIENT_DIST_DIR: /app/client-dist
+      FFMPEG_PATH: /usr/local/bin/ffmpeg
+      FFPROBE_PATH: /usr/local/bin/ffprobe
     restart: unless-stopped
 
 volumes:

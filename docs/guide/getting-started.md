@@ -18,8 +18,9 @@ docker compose up --build
 ```
 
 Open `http://localhost:3001`. On first launch the app asks
-for your OpenAI API key. To skip that, create a `.env` file next to
-`compose.yaml` containing `OPENAI_API_KEY=sk-...` before starting.
+for your OpenAI API key. To skip that, run `cp .env.example .env` and set
+`OPENAI_API_KEY` before starting. It's the same root `.env` the
+development setup uses.
 
 Projects, uploads and renders live in the `transcriptcut-data` Docker
 volume, so they survive restarts and rebuilds. To update, run
@@ -48,16 +49,14 @@ For working on the code, with hot reload.
 ```bash
 git clone https://github.com/amide-init/transcriptcut.git
 cd transcriptcut
-pnpm install                  # installs deps for client + server
-cd server
-cp .env.example .env          # then fill in OPENAI_API_KEY
-bunx prisma generate
-cd ..
-pnpm run dev                  # runs the Vite client and Bun backend together
+pnpm install                      # installs deps for client + server
+cp .env.example .env              # then fill in OPENAI_API_KEY
+pnpm --filter server db:generate  # generates the Prisma client
+pnpm run dev                      # runs the Vite client and Bun backend together
 ```
 
 Open `http://localhost:5173`. See
-[`server/.env.example`](https://github.com/amide-init/transcriptcut/blob/main/server/.env.example)
+[`.env.example`](https://github.com/amide-init/transcriptcut/blob/main/.env.example)
 for what each variable does. `MAX_UPLOAD_MB` raises or lowers the upload
 limit, which defaults to 10 GB.
 

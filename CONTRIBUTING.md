@@ -12,16 +12,14 @@ any of the tools below; see the README. For working on the code:
 
 
 ```bash
-pnpm install                  # installs deps for client + server
-cd server
-cp .env.example .env          # then fill in OPENAI_API_KEY
-bunx prisma generate
-cd ..
-pnpm run dev                  # runs the Vite client and Bun backend together
+pnpm install                      # installs deps for client + server
+cp .env.example .env              # then fill in OPENAI_API_KEY
+pnpm --filter server db:generate  # generates the Prisma client
+pnpm run dev                      # runs the Vite client and Bun backend together
 ```
 
 Open [http://localhost:5173](http://localhost:5173). See
-[`server/.env.example`](./server/.env.example) for what each variable
+[`.env.example`](./.env.example) for what each variable
 does.
 
 You'll also need [FFmpeg](https://ffmpeg.org/download.html) and
