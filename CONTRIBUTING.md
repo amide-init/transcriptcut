@@ -7,29 +7,26 @@ issues for bugs and ideas.
 
 ## Running it locally
 
-On macOS, `./scripts/setup-mac.sh` handles all of this for you (Node/pnpm/
-Bun/FFmpeg via Homebrew, `pnpm install`, `prisma generate`, and `.env`) --
-see the README's "macOS quick start". Otherwise, manually:
+Just want to use the app? `docker compose up --build` runs it without
+any of the tools below; see the README. For working on the code:
+
 
 ```bash
-pnpm install                  # installs deps for client + server
-cd server
-cp .env.example .env          # then fill in OPENAI_API_KEY
-bunx prisma generate
-cd ..
-pnpm run dev                  # runs the Vite client and Bun backend together
+pnpm install                      # installs deps for client + server
+cp .env.example .env              # then fill in OPENAI_API_KEY
+pnpm --filter server db:generate  # generates the Prisma client
+pnpm run dev                      # runs the Vite client and Bun backend together
 ```
 
 Open [http://localhost:5173](http://localhost:5173). See
-[`server/.env.example`](./server/.env.example) for what each variable
+[`.env.example`](./.env.example) for what each variable
 does.
 
 You'll also need [FFmpeg](https://ffmpeg.org/download.html) and
 [Bun](https://bun.sh) (the backend's runtime) on your machine. If burning
 in captions fails with `No such filter: 'subtitles'`, your FFmpeg build
-doesn't include libass — see the `FFMPEG_PATH` note in `.env.example` (or
-just use `scripts/setup-mac.sh`, which installs and points at a build
-that has it).
+doesn't include libass — see the `FFMPEG_PATH` note in `.env.example`
+(on macOS, Homebrew's `ffmpeg-full` has it).
 
 ## Before submitting a PR
 

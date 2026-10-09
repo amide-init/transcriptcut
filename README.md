@@ -124,40 +124,50 @@ pnpm run dev
 
 ## Running the app
 
-Requires [FFmpeg](https://ffmpeg.org/download.html) (with `ffprobe`) and
-[Bun](https://bun.sh) (the backend's runtime) on your machine, plus an
-OpenAI API key (used server-side only, for transcription and the AI
-buttons).
+The easiest way to run it is with [Docker](https://docs.docker.com/get-docker/).
+The image includes Bun, FFmpeg (with subtitle burn-in support) and the
+fonts captions need. You only bring an OpenAI API key, used server-side
+for transcription and the AI buttons.
 
-### macOS quick start
-
-[`scripts/setup-mac.sh`](./scripts/setup-mac.sh) installs Node/pnpm/Bun/
-FFmpeg (with subtitle burn-in support) via Homebrew if you don't already
-have them, installs dependencies for the whole workspace, and walks you
-through `.env`:
+### With Docker
 
 ```bash
 git clone https://github.com/amide-init/transcriptcut.git
 cd transcriptcut
-./scripts/setup-mac.sh
+docker compose up --build
 ```
 
-Then `pnpm run dev` from the repo root. Safe to re-run -- it only
-installs what's missing and never overwrites an existing `.env`.
+Open [http://localhost:3001](http://localhost:3001). On first launch the
+app asks for your OpenAI API key. To skip that, run `cp .env.example .env`
+and set `OPENAI_API_KEY` before starting. It's the same root `.env` the
+development setup uses.
 
-### Manual setup (any platform)
+Projects, uploads and renders live in the `transcriptcut-data` Docker
+volume, so they survive restarts and rebuilds. To update, run
+`git pull && docker compose up --build`.
+
+The app is published on `127.0.0.1` only, since it has no login (see
+`claude.md` section 18). Caption fonts use free Liberation and DejaVu equivalents of Arial,
+Helvetica, Verdana and the rest, so burned-in captions can look slightly
+different from the same export on a Mac.
+
+### Development setup
+
+For working on the code, with hot reload. Requires
+[FFmpeg](https://ffmpeg.org/download.html) (with `ffprobe`) and
+[Bun](https://bun.sh) on your machine:
 
 ```bash
-pnpm install                  # installs deps for client + server
-cd server
-cp .env.example .env          # then fill in OPENAI_API_KEY
-bunx prisma generate
-cd ..
-pnpm run dev                  # runs the Vite client and Bun backend together
+git clone https://github.com/amide-init/transcriptcut.git
+cd transcriptcut
+pnpm install                      # installs deps for client + server
+cp .env.example .env              # then fill in OPENAI_API_KEY
+pnpm --filter server db:generate  # generates the Prisma client
+pnpm run dev                      # runs the Vite client and Bun backend together
 ```
 
 Open [http://localhost:5173](http://localhost:5173). See
-[`server/.env.example`](./server/.env.example) for what each variable
+[`.env.example`](./.env.example) for what each variable
 does, and [`CONTRIBUTING.md`](./CONTRIBUTING.md) for more.
 
 One thing to know during development:
